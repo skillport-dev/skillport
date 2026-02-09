@@ -53,9 +53,24 @@ export async function publishCommand(sspPath: string): Promise<void> {
       return;
     }
 
-    const result = await response.json() as Record<string, unknown>;
+    const result = await response.json() as {
+      id: string;
+      ssp_id: string;
+      version: string;
+      version_id: string;
+      scan_passed: boolean;
+      risk_score: number;
+    };
     console.log(chalk.green("Published successfully!"));
+    console.log();
+    console.log(`  ${chalk.bold("Skill ID:")}    ${result.id}`);
+    console.log(`  ${chalk.bold("SSP ID:")}      ${result.ssp_id}`);
+    console.log(`  ${chalk.bold("Version:")}     ${result.version}`);
+    console.log(`  ${chalk.bold("Scan:")}        ${result.scan_passed ? chalk.green("PASSED") : chalk.red("FAILED")}`);
+    console.log(`  ${chalk.bold("Risk Score:")}  ${result.risk_score}/100`);
+    console.log();
     console.log(chalk.dim(`  URL: ${config.marketplace_url}/skills/${result.id}`));
+    console.log(chalk.dim(`  Install: skillport install ${result.ssp_id}@${result.version}`));
   } catch (error) {
     console.log(chalk.red(`Upload failed: ${(error as Error).message}`));
     process.exitCode = 1;

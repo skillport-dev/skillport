@@ -29,16 +29,86 @@ export async function installCommand(
   target: string,
   options: { acceptRisk?: boolean },
 ): Promise<void> {
-  // 1. Load SSP
+  // 1. Load SSP — local file or download from marketplace
   let data: Buffer;
   if (existsSync(target)) {
     data = readFileSync(target);
   } else {
-    // TODO: Download from marketplace
-    console.log(chalk.red(`File not found: ${target}`));
-    console.log(chalk.dim("Marketplace download not yet implemented."));
-    process.exitCode = 1;
-    return;
+    // Try to resolve as marketplace skill ID (e.g. "author/skill@1.0.0" or UUID)
+    console.log(chalk.dim(`Resolving from marketplace: ${target}`));
+
+    const { loadConfig } = await import("../utils/config.js");
+    const config = loadConfig();
+    if (!config.auth_token) {
+      console.log(chalk.red("Not logged in. Run 'skillport login' first."));
+      process.exitCode = 1;
+      return;
+    }
+
+    // Parse target — could be "skill-id@version" or just "skill-id"
+    let skillId = target;
+    let version: string | undefined;
+    const atIdx = target.lastIndexOf("@");
+    if (atIdx > 0) {
+      skillId = target.substring(0, atIdx);
+      version = target.substring(atIdx + 1);
+    }
+
+    try {
+      // Search by ssp_id if it contains "/"
+      let resolvedId = skillId;
+      if (skillId.includes("/")) {
+        const searchRes = await fetch(
+          `${config.marketplace_url}/v1/skills?q=${encodeURIComponent(skillId)}&per_page=1`,
+          { headers: { Authorization: `Bearer ${config.auth_token}` } },
+        );
+        if (!searchRes.ok) {
+          console.log(chalk.red(`Marketplace search failed: ${searchRes.statusText}`));
+          process.exitCode = 1;
+          return;
+        }
+        const searchData = await searchRes.json() as { data: Array<{ id: string; ssp_id: string }> };
+        const match = searchData.data.find((s) => s.ssp_id === skillId);
+        if (!match) {
+          console.log(chalk.red(`Skill not found: ${skillId}`));
+          process.exitCode = 1;
+          return;
+        }
+        resolvedId = match.id;
+      }
+
+      // Get download URL
+      const dlUrl = version
+        ? `${config.marketplace_url}/v1/skills/${resolvedId}/download?version=${version}`
+        : `${config.marketplace_url}/v1/skills/${resolvedId}/download`;
+
+      const dlRes = await fetch(dlUrl, {
+        headers: { Authorization: `Bearer ${config.auth_token}` },
+      });
+      if (!dlRes.ok) {
+        const err = await dlRes.json() as Record<string, unknown>;
+        console.log(chalk.red(`Download failed: ${err.error || dlRes.statusText}`));
+        process.exitCode = 1;
+        return;
+      }
+
+      const { url } = await dlRes.json() as { url: string };
+
+      // Download the actual file
+      console.log(chalk.dim("Downloading package..."));
+      const fileRes = await fetch(url);
+      if (!fileRes.ok) {
+        console.log(chalk.red("Failed to download package file."));
+        process.exitCode = 1;
+        return;
+      }
+      data = Buffer.from(await fileRes.arrayBuffer());
+      console.log(chalk.green(`  Downloaded ${(data.length / 1024).toFixed(1)} KB`));
+    } catch (err) {
+      console.log(chalk.red(`Marketplace error: ${(err as Error).message}`));
+      process.exitCode = 1;
+      return;
+    }
   }
 
   console.log("Extracting SkillPort package...");
