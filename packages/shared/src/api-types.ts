@@ -81,10 +81,9 @@ export interface PurchaseRequest {
   version_id?: string;
 }
 
-export interface PurchaseResponse {
-  id: string;
-  entitled: boolean;
-}
+export type PurchaseResponse =
+  | { id: string; entitled: true }
+  | { checkout_url: string };
 
 export interface EntitlementCheck {
   entitled: boolean;
