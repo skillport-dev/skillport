@@ -86,7 +86,7 @@ server.tool(
       `**${s.title}** (${s.ssp_id})\n` +
       `  ${s.description}\n` +
       `  Risk: ${s.risk_score}/100 | Rating: ${s.avg_rating?.toFixed(1) || "N/A"} | Downloads: ${s.downloads}\n` +
-      `  Category: ${s.category} | Price: ${s.price === 0 ? "Free" : `¥${s.price.toLocaleString()}`}\n` +
+      `  Category: ${s.category} | Price: ${s.price === 0 ? "Free" : `$${(s.price / 100).toFixed(2)}`}\n` +
       `  OS: ${s.os_compat?.join(", ") || "all"} | Tags: ${s.tags?.join(", ") || "none"}`
     ).join("\n\n");
 
@@ -122,7 +122,7 @@ server.tool(
       `- Danger Flags: ${skill.danger_flag_count}\n` +
       `- Rating: ${skill.avg_rating?.toFixed(1) || "N/A"}\n` +
       `- Downloads: ${skill.downloads}\n` +
-      `- Price: ${skill.price === 0 ? "Free" : `¥${skill.price.toLocaleString()}`}\n` +
+      `- Price: ${skill.price === 0 ? "Free" : `$${(skill.price / 100).toFixed(2)}`}\n` +
       `- Category: ${skill.category}\n` +
       `- OS: ${skill.os_compat?.join(", ") || "all"}\n` +
       `- Tags: ${skill.tags?.join(", ") || "none"}\n\n` +
