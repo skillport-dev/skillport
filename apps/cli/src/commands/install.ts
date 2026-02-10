@@ -24,6 +24,16 @@ import {
   displayPermissions,
   displayDangerFlags,
 } from "../utils/display.js";
+import {
+  parseSkillMd,
+  reconstructSkillMd,
+  sectionSummary,
+} from "../utils/skill-parser.js";
+import {
+  checkEnvironment,
+  findIncompatibleSections,
+  detectOS,
+} from "../utils/env-detect.js";
 
 export async function installCommand(
   target: string,
@@ -144,6 +154,56 @@ export async function installCommand(
     console.log(chalk.green("  Platform signature present."));
   }
 
+  // ─── Skill Overview ───
+  console.log("");
+  console.log(chalk.bold("╔══════════════════════════════════════╗"));
+  console.log(chalk.bold(`║  ${manifest.name}`));
+  console.log(chalk.bold(`║  v${manifest.version} by ${manifest.author.name}`));
+  console.log(chalk.bold("╚══════════════════════════════════════╝"));
+  console.log(chalk.dim(`  ${manifest.description}`));
+  console.log(chalk.dim(`  OS: ${manifest.os_compat.join(", ")} | ID: ${manifest.id}`));
+  console.log("");
+
+  // ─── Environment Check ───
+  console.log(chalk.bold("Environment Check:"));
+  console.log(chalk.dim("─".repeat(50)));
+
+  const envReport = checkEnvironment(manifest);
+
+  // OS
+  const osIcon = envReport.os.compatible ? chalk.green("✓") : chalk.red("✗");
+  console.log(`  ${osIcon} OS: ${envReport.os.name} ${envReport.os.compatible ? "" : chalk.red("(not compatible)")}`);
+
+  // Binaries
+  for (const bin of envReport.binaries) {
+    const icon = bin.status === "ok" ? chalk.green("✓")
+      : bin.status === "warn" ? chalk.yellow("!")
+      : chalk.red("✗");
+    console.log(`  ${icon} ${bin.check}: ${chalk.dim(bin.detail)}`);
+  }
+
+  // Env vars
+  for (const env of envReport.envVars) {
+    const icon = env.status === "ok" ? chalk.green("✓")
+      : env.status === "warn" ? chalk.yellow("!")
+      : chalk.red("✗");
+    console.log(`  ${icon} ${env.check}: ${chalk.dim(env.detail)}`);
+  }
+
+  if (envReport.binaries.length === 0 && envReport.envVars.length === 0) {
+    console.log(chalk.dim("  No specific dependencies required."));
+  }
+
+  console.log(chalk.dim("─".repeat(50)));
+
+  if (!envReport.os.compatible) {
+    console.log(chalk.red(`\nThis skill is not compatible with your OS (${envReport.os.name}).`));
+    console.log(chalk.red(`Supported: ${manifest.os_compat.join(", ")}`));
+    process.exitCode = 1;
+    return;
+  }
+  console.log("");
+
   // 4. Local re-scan
   console.log("Running local security scan...");
   const textFiles = new Map<string, string>();
@@ -186,13 +246,139 @@ export async function installCommand(
     return;
   }
 
-  // Prompt for confirmation
+  // ─── Adaptive Content Selection ───
+  // Parse SKILL.md and let user customize what gets installed
+  let finalSkillMd: string | undefined;
+  let finalFiles = extracted.files;
+
+  if (extracted.skillMd) {
+    const parsed = parseSkillMd(extracted.skillMd);
+
+    if (parsed.sections.length > 1) {
+      // Find sections that reference missing dependencies
+      const missingBins = envReport.binaries
+        .filter((b) => b.status === "missing")
+        .map((b) => b.check);
+
+      const incompatibleIndices = findIncompatibleSections(
+        parsed.sections.map((s) => s.raw),
+        missingBins,
+      );
+
+      console.log(chalk.bold("Skill Sections:"));
+
+      for (let i = 0; i < parsed.sections.length; i++) {
+        const section = parsed.sections[i];
+        const summary = sectionSummary(section);
+        const isIncompat = incompatibleIndices.includes(i);
+        const icon = isIncompat ? chalk.yellow("!") : chalk.green("✓");
+        const hint = isIncompat
+          ? chalk.yellow(" (requires missing dependency)")
+          : "";
+
+        console.log(`  ${icon} ${section.heading}${hint}`);
+        if (summary) {
+          console.log(chalk.dim(`    ${summary}`));
+        }
+      }
+      console.log("");
+
+      // Offer customization if there are incompatible or many sections
+      const hasIncompat = incompatibleIndices.length > 0;
+      const customizeMessage = hasIncompat
+        ? "Some sections require missing dependencies. Customize installation?"
+        : "Customize which sections to install?";
+
+      const { customize } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "customize",
+          message: customizeMessage,
+          default: hasIncompat,
+        },
+      ]);
+
+      if (customize) {
+        const sectionChoices = parsed.sections.map((section, idx) => {
+          const isIncompat = incompatibleIndices.includes(idx);
+          const summary = sectionSummary(section);
+          const label = isIncompat
+            ? `${section.heading} ${chalk.yellow("(missing deps)")}`
+            : summary
+              ? `${section.heading} ${chalk.dim(`— ${summary}`)}`
+              : section.heading;
+          return { name: label, value: idx, checked: !isIncompat };
+        });
+
+        const { selectedSections } = await inquirer.prompt([
+          {
+            type: "checkbox",
+            name: "selectedSections",
+            message: "Select sections to install:",
+            choices: sectionChoices,
+            validate: (v: number[]) =>
+              v.length > 0 || "At least one section must be selected",
+          },
+        ]);
+
+        // Reconstruct SKILL.md with selected sections
+        finalSkillMd = reconstructSkillMd(parsed, selectedSections);
+
+        // Also filter payload files if sections were excluded
+        const excludedIndices = new Set(
+          parsed.sections
+            .map((_, i) => i)
+            .filter((i) => !selectedSections.includes(i)),
+        );
+
+        if (excludedIndices.size > 0) {
+          const excludedRefs = new Set<string>();
+          for (const idx of excludedIndices) {
+            for (const ref of parsed.sections[idx].referencedFiles) {
+              excludedRefs.add(ref);
+            }
+          }
+
+          // Only filter payload files referenced exclusively by excluded sections
+          if (excludedRefs.size > 0) {
+            // Check if any included section also references these files
+            const includedRefs = new Set<string>();
+            for (const idx of selectedSections) {
+              for (const ref of parsed.sections[idx].referencedFiles) {
+                includedRefs.add(ref);
+              }
+            }
+
+            const toRemove = new Set<string>();
+            for (const ref of excludedRefs) {
+              if (!includedRefs.has(ref)) {
+                toRemove.add(ref);
+                // Also check payload/ prefixed
+                toRemove.add(`payload/${ref}`);
+              }
+            }
+
+            if (toRemove.size > 0) {
+              finalFiles = new Map(
+                [...extracted.files].filter(([path]) => !toRemove.has(path)),
+              );
+            }
+          }
+
+          const removedCount = parsed.sections.length - selectedSections.length;
+          console.log(chalk.cyan(`\nOptimized: ${removedCount} section(s) excluded for your environment.`));
+        }
+      }
+    }
+  }
+
+  // Final confirmation
   const { confirm } = await inquirer.prompt([
     {
       type: "confirm",
       name: "confirm",
       message: `Install ${manifest.name} v${manifest.version}?`,
-      default: false,
+      default: true,
     },
   ]);
 
@@ -217,13 +403,15 @@ export async function installCommand(
     JSON.stringify(manifest, null, 2),
   );
 
-  // Write SKILL.md
-  if (extracted.skillMd) {
-    writeFileSync(join(installDir, "SKILL.md"), extracted.skillMd);
+  // Write SKILL.md (optimized or original)
+  const skillMdToWrite = finalSkillMd ?? extracted.skillMd;
+  if (skillMdToWrite) {
+    writeFileSync(join(installDir, "SKILL.md"), skillMdToWrite);
   }
 
-  // Write payload files
-  for (const [path, content] of extracted.files) {
+  // Write payload files (filtered or all)
+  for (const [path, content] of finalFiles) {
+    if (path === "SKILL.md") continue; // already written above
     const cleanPath = path.startsWith("payload/") ? path.substring(8) : path;
     const filePath = join(installDir, cleanPath);
     const dir = filePath.substring(0, filePath.lastIndexOf("/"));
@@ -233,21 +421,32 @@ export async function installCommand(
 
   // 7. Collect required inputs
   if (manifest.install.required_inputs.length > 0) {
-    console.log(chalk.bold("\nRequired configuration:"));
-    const inputAnswers = await inquirer.prompt(
-      manifest.install.required_inputs.map((input) => ({
-        type: input.type === "secret" ? "password" : "input",
-        name: input.key,
-        message: input.description,
-        default: input.default?.toString(),
-      })),
-    );
+    // Only ask for inputs relevant to installed sections
+    const relevantInputs = manifest.install.required_inputs.filter((input) => {
+      // If SKILL.md was customized, check if the key is still referenced
+      if (finalSkillMd) {
+        return finalSkillMd.toLowerCase().includes(input.key.toLowerCase());
+      }
+      return true;
+    });
 
-    // Save inputs as .env in install dir
-    const envContent = Object.entries(inputAnswers)
-      .map(([k, v]) => `${k}=${v}`)
-      .join("\n");
-    writeFileSync(join(installDir, ".env"), envContent, { mode: 0o600 });
+    if (relevantInputs.length > 0) {
+      console.log(chalk.bold("\nRequired configuration:"));
+      const inputAnswers = await inquirer.prompt(
+        relevantInputs.map((input) => ({
+          type: input.type === "secret" ? "password" : "input",
+          name: input.key,
+          message: input.description,
+          default: input.default?.toString(),
+        })),
+      );
+
+      // Save inputs as .env in install dir
+      const envContent = Object.entries(inputAnswers)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("\n");
+      writeFileSync(join(installDir, ".env"), envContent, { mode: 0o600 });
+    }
   }
 
   // 8. Update registry
@@ -269,8 +468,12 @@ export async function installCommand(
     version: manifest.version,
     risk_score: report.risk_score,
     install_path: installDir,
+    customized: finalSkillMd !== undefined,
   });
 
   console.log(chalk.green(`\nInstalled: ${manifest.name} v${manifest.version}`));
   console.log(chalk.dim(`  Location: ${installDir}`));
+  if (finalSkillMd) {
+    console.log(chalk.dim("  Optimized for your environment."));
+  }
 }
