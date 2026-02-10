@@ -17,6 +17,11 @@ import {
   reconstructSkillMd,
   sectionSummary,
 } from "../utils/skill-parser.js";
+import {
+  runQualityCheck,
+  depsToManifest,
+  type QualityReport,
+} from "../utils/quality-check.js";
 
 function collectAllFiles(
   dir: string,
@@ -174,6 +179,52 @@ async function selectContent(
   return filtered;
 }
 
+function displayQualityReport(report: QualityReport): void {
+  console.log("");
+  console.log(chalk.bold("Quality Report:"));
+  console.log(chalk.dim("─".repeat(50)));
+
+  // Dependencies
+  if (report.detectedDeps.length > 0) {
+    console.log(chalk.bold("  Detected dependencies:"));
+    for (const dep of report.detectedDeps) {
+      const icon = dep.available ? chalk.green("✓") : chalk.yellow("!");
+      const status = dep.available ? "installed" : "not found";
+      console.log(`    ${icon} ${dep.name} ${chalk.dim(`(${status} — from ${dep.source})`)}`);
+    }
+  } else {
+    console.log(chalk.dim("  No CLI dependencies detected."));
+  }
+
+  // Broken references
+  if (report.brokenRefs.length > 0) {
+    console.log("");
+    console.log(chalk.bold("  Broken file references:"));
+    for (const ref of report.brokenRefs) {
+      console.log(`    ${chalk.red("✗")} ${ref.ref} ${chalk.dim(`(in ${ref.source})`)}`);
+    }
+  }
+
+  // Structural issues
+  if (report.issues.length > 0) {
+    console.log("");
+    for (const issue of report.issues) {
+      const icon = issue.severity === "error" ? chalk.red("✗")
+        : issue.severity === "warn" ? chalk.yellow("!")
+        : chalk.blue("i");
+      console.log(`  ${icon} ${issue.message}`);
+    }
+  }
+
+  // Score
+  console.log(chalk.dim("─".repeat(50)));
+  const scoreColor = report.score >= 80 ? chalk.green
+    : report.score >= 50 ? chalk.yellow
+    : chalk.red;
+  console.log(`  Quality score: ${scoreColor(`${report.score}/100`)}${report.passed ? "" : chalk.red(" — FAILED")}`);
+  console.log("");
+}
+
 export async function exportCommand(
   path: string,
   options: { output?: string },
@@ -199,6 +250,28 @@ export async function exportCommand(
 
   // Interactive content selection
   const selectedFiles = await selectContent(allFiles);
+
+  // ─── Quality Check ───
+  console.log("\nRunning quality check...");
+  const skillMdForCheck = selectedFiles.get("SKILL.md")!.toString("utf-8");
+  const qualityReport = runQualityCheck(skillMdForCheck, selectedFiles);
+
+  displayQualityReport(qualityReport);
+
+  if (!qualityReport.passed) {
+    const { continueExport } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "continueExport",
+        message: chalk.yellow("Quality issues found. Continue with export?"),
+        default: false,
+      },
+    ]);
+    if (!continueExport) {
+      console.log("Export cancelled. Fix the issues above and try again.");
+      return;
+    }
+  }
 
   // Run security scan on selected files (fail-closed)
   console.log("\nRunning security scan...");
@@ -279,6 +352,9 @@ export async function exportCommand(
     line: issue.line,
   }));
 
+  // Auto-populate dependencies from quality check
+  const detectedDeps = depsToManifest(qualityReport.detectedDeps);
+
   const manifest: Manifest = {
     ssp_version: SP_VERSION,
     id: answers.id,
@@ -297,7 +373,7 @@ export async function exportCommand(
       filesystem: { read_paths: [], write_paths: [] },
       exec: { allowed_commands: [], shell: false },
     },
-    dependencies: [],
+    dependencies: detectedDeps,
     danger_flags: dangerFlags,
     install: { steps: [], required_inputs: [] },
     hashes: {},
@@ -322,5 +398,13 @@ export async function exportCommand(
   );
   console.log(
     chalk.dim(`  Files: ${selectedFiles.size} (including SKILL.md)`),
+  );
+  if (detectedDeps.length > 0) {
+    console.log(
+      chalk.dim(`  Dependencies: ${detectedDeps.map((d) => d.name).join(", ")}`),
+    );
+  }
+  console.log(
+    chalk.dim(`  Quality: ${qualityReport.score}/100`),
   );
 }
