@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, basename } from "node:path";
 import chalk from "chalk";
 import inquirer from "inquirer";
@@ -12,6 +12,11 @@ import {
   loadConfig,
 } from "../utils/config.js";
 import { displayScanReport } from "../utils/display.js";
+import {
+  parseSkillMd,
+  reconstructSkillMd,
+  sectionSummary,
+} from "../utils/skill-parser.js";
 
 function collectAllFiles(
   dir: string,
@@ -38,6 +43,137 @@ function collectAllFiles(
   return files;
 }
 
+/**
+ * Interactive content selection — lets users choose which SKILL.md sections
+ * and payload files to include in the package.
+ *
+ * Returns the filtered file map with a reconstructed SKILL.md.
+ */
+async function selectContent(
+  allFiles: Map<string, Buffer>,
+): Promise<Map<string, Buffer>> {
+  const skillMdContent = allFiles.get("SKILL.md")!.toString("utf-8");
+  const parsed = parseSkillMd(skillMdContent);
+
+  // If no ## sections, nothing to select — include everything
+  if (parsed.sections.length === 0) {
+    return allFiles;
+  }
+
+  // Show skill overview
+  const payloadFiles = [...allFiles.keys()].filter((f) => f !== "SKILL.md");
+  console.log("");
+  console.log(chalk.bold("Skill overview:"));
+  console.log(chalk.dim(`  SKILL.md sections: ${parsed.sections.length}`));
+  console.log(chalk.dim(`  Payload files:     ${payloadFiles.length}`));
+  console.log("");
+
+  // Ask whether to customize
+  const { customize } = await inquirer.prompt([
+    {
+      type: "confirm",
+      name: "customize",
+      message: "Select which sections and files to include?",
+      default: false,
+    },
+  ]);
+
+  if (!customize) {
+    return allFiles;
+  }
+
+  // Section selection
+  console.log("");
+  console.log(chalk.bold("SKILL.md sections:"));
+
+  const sectionChoices = parsed.sections.map((section, idx) => {
+    const summary = sectionSummary(section);
+    const label = summary
+      ? `${section.heading} ${chalk.dim(`— ${summary}`)}`
+      : section.heading;
+    return { name: label, value: idx, checked: true };
+  });
+
+  const { selectedSections } = await inquirer.prompt([
+    {
+      type: "checkbox",
+      name: "selectedSections",
+      message: "Include these sections:",
+      choices: sectionChoices,
+      validate: (v: number[]) =>
+        v.length > 0 || "At least one section must be selected",
+    },
+  ]);
+
+  // File selection (if there are payload files)
+  let selectedFiles = payloadFiles;
+  if (payloadFiles.length > 0) {
+    console.log("");
+
+    // Highlight files referenced by excluded sections
+    const excludedIndices = new Set(
+      parsed.sections
+        .map((_, i) => i)
+        .filter((i) => !selectedSections.includes(i)),
+    );
+    const excludedRefs = new Set<string>();
+    for (const idx of excludedIndices) {
+      for (const ref of parsed.sections[idx].referencedFiles) {
+        excludedRefs.add(ref);
+      }
+    }
+
+    const fileChoices = payloadFiles.map((filePath) => {
+      const size = allFiles.get(filePath)!.length;
+      const sizeStr = size < 1024
+        ? `${size} B`
+        : `${(size / 1024).toFixed(1)} KB`;
+      const hint = excludedRefs.has(filePath)
+        ? chalk.yellow(" (referenced by excluded section)")
+        : "";
+      return {
+        name: `${filePath} ${chalk.dim(`(${sizeStr})`)}${hint}`,
+        value: filePath,
+        checked: !excludedRefs.has(filePath),
+      };
+    });
+
+    const { files } = await inquirer.prompt([
+      {
+        type: "checkbox",
+        name: "files",
+        message: "Include these files:",
+        choices: fileChoices,
+      },
+    ]);
+    selectedFiles = files;
+  }
+
+  // Reconstruct SKILL.md with selected sections only
+  const newSkillMd = reconstructSkillMd(parsed, selectedSections);
+
+  // Build filtered file map
+  const filtered = new Map<string, Buffer>();
+  filtered.set("SKILL.md", Buffer.from(newSkillMd, "utf-8"));
+  for (const filePath of selectedFiles) {
+    filtered.set(filePath, allFiles.get(filePath)!);
+  }
+
+  // Summary
+  const removedSections = parsed.sections.length - selectedSections.length;
+  const removedFiles = payloadFiles.length - selectedFiles.length;
+  if (removedSections > 0 || removedFiles > 0) {
+    console.log("");
+    console.log(
+      chalk.cyan(
+        `Customized: ${removedSections} section(s) and ${removedFiles} file(s) excluded`,
+      ),
+    );
+  }
+
+  return filtered;
+}
+
 export async function exportCommand(
   path: string,
   options: { output?: string },
@@ -61,10 +197,13 @@ export async function exportCommand(
     return;
   }
 
-  // Run security scan (fail-closed)
-  console.log("Running security scan...");
+  // Interactive content selection
+  const selectedFiles = await selectContent(allFiles);
+
+  // Run security scan on selected files (fail-closed)
+  console.log("\nRunning security scan...");
   const textFiles = new Map<string, string>();
-  for (const [p, content] of allFiles) {
+  for (const [p, content] of selectedFiles) {
     if (isScannable(p)) {
       textFiles.set(p, content.toString("utf-8"));
     }
@@ -165,20 +304,23 @@ export async function exportCommand(
     created_at: new Date().toISOString(),
   };
 
-  // Create SkillPort package
+  // Create SkillPort package with selected files only
   console.log("Creating SkillPort package...");
   const privateKey = loadPrivateKey();
   const sspBuffer = await createSSP({
     manifest,
-    files: allFiles,
+    files: selectedFiles,
     privateKeyPem: privateKey,
   });
 
   const outputPath = options.output || `${basename(path)}.ssp`;
   writeFileSync(outputPath, sspBuffer);
 
-  console.log(chalk.green(`SkillPort package created: ${outputPath}`));
+  console.log(chalk.green(`\nSkillPort package created: ${outputPath}`));
   console.log(
     chalk.dim(`  Size: ${(sspBuffer.length / 1024).toFixed(1)} KB`),
+  );
+  console.log(
+    chalk.dim(`  Files: ${selectedFiles.size} (including SKILL.md)`),
   );
 }
