@@ -12,7 +12,14 @@ Secure skill distribution for [OpenClaw](https://openclaw.dev) / ClawHub.
 | `packages/shared` | API types & constants |
 | `packages/mcp` | MCP Server for AI agent integration |
 
-## Quick Start
+## Install CLI
+
+```bash
+npm install -g @skillport/cli
+skillport --help
+```
+
+## Quick Start (development)
 
 ```bash
 pnpm install
