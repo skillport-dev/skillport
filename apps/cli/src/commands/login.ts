@@ -28,7 +28,7 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
   const config = loadConfig();
 
   console.log(chalk.bold("SkillPort Market Login"));
-  console.log(chalk.dim(`Marketplace: ${config.marketplace_url}`));
+  console.log(chalk.dim(`Marketplace: ${config.marketplace_web_url}`));
   console.log();
 
   let method = options.method;
@@ -90,7 +90,7 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
     }
   }
 
-  const authUrl = `${config.marketplace_url}/auth/cli?state=${state}&port=${actualPort}`;
+  const authUrl = `${config.marketplace_web_url}/auth/cli?state=${state}&port=${actualPort}`;
 
   if (options.browser === false) {
     // --no-browser: print URL only

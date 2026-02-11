@@ -8,10 +8,12 @@ import {
   SP_CONFIG_FILE,
   SP_REGISTRY_FILE,
   DEFAULT_MARKETPLACE_URL,
+  DEFAULT_MARKETPLACE_WEB_URL,
 } from "@skillport/shared";
 
 export interface SkillPortConfig {
   marketplace_url: string;
+  marketplace_web_url: string;
   auth_token?: string;
   default_key_id?: string;
 }
@@ -58,9 +60,17 @@ export function registryPath(): string {
 export function loadConfig(): SkillPortConfig {
   const path = configPath();
   if (!existsSync(path)) {
-    return { marketplace_url: DEFAULT_MARKETPLACE_URL };
+    return {
+      marketplace_url: DEFAULT_MARKETPLACE_URL,
+      marketplace_web_url: DEFAULT_MARKETPLACE_WEB_URL,
+    };
   }
-  return JSON.parse(readFileSync(path, "utf-8"));
+  const raw = JSON.parse(readFileSync(path, "utf-8"));
+  // Backward compat: derive web URL if missing
+  if (!raw.marketplace_web_url) {
+    raw.marketplace_web_url = DEFAULT_MARKETPLACE_WEB_URL;
+  }
+  return raw;
 }
 
 export function saveConfig(config: SkillPortConfig): void {

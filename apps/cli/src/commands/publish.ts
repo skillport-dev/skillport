@@ -93,7 +93,7 @@ export async function publishCommand(sspPath: string): Promise<void> {
     console.log(`  ${chalk.bold("Scan:")}        ${result.scan_passed ? chalk.green("PASSED") : chalk.red("FAILED")}`);
     console.log(`  ${chalk.bold("Risk Score:")}  ${result.risk_score}/100`);
     console.log();
-    console.log(chalk.dim(`  URL: ${config.marketplace_url}/skills/${result.id}`));
+    console.log(chalk.dim(`  URL: ${config.marketplace_web_url}/skills/${result.id}`));
     console.log(chalk.dim(`  Install: skillport install ${result.ssp_id}@${result.version}`));
   } catch (error) {
     console.log(chalk.red(`Upload failed: ${(error as Error).message}`));

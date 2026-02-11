@@ -10,6 +10,7 @@ export const SP_REGISTRY_FILE = "installed/registry.json";
 export const OPENCLAW_SKILLS_DIR = ".openclaw/skills";
 
 export const DEFAULT_MARKETPLACE_URL = "https://api.skillport.market";
+export const DEFAULT_MARKETPLACE_WEB_URL = "https://skillport.market";
 
 export const RATE_LIMITS = {
   unauthenticated: 30,

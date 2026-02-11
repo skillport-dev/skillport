@@ -84,7 +84,7 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     expect(config.auth_token).toBe("test-token-123");
   });
 
-  it("login --yes --no-browser --port 0 prints URL without opening browser", () => {
+  it("login --yes --no-browser --port 0 prints URL using web domain", () => {
     // --port 0 lets the OS pick a free port, avoiding EADDRINUSE.
     // The process starts a callback server that blocks waiting for auth.
     // execSync will timeout and throw — we capture stdout from the error.
@@ -96,6 +96,9 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
       const msg = (e as { stdout?: string }).stdout || (e as Error).message || "";
       expect(msg).toContain("Open this URL in your browser to authenticate:");
       expect(msg).not.toContain("Login method:");
+      // Auth URL must point to web domain, not API domain
+      expect(msg).toContain("https://skillport.market/auth/cli?");
+      expect(msg).not.toContain("api.skillport.market/auth/cli");
     }
     expect(caught).toBe(true);
   }, 10_000);

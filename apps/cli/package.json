@@ -1,6 +1,6 @@
 {
   "name": "@skillport/cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "SkillPort CLI — secure skill distribution for OpenClaw. Export, scan, sign, and install AI skill packages.",
   "type": "module",
   "license": "MIT",
