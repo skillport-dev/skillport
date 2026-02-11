@@ -1,6 +1,8 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import chalk from "chalk";
-import { extractSSP, verifyChecksums } from "@skillport/core";
+import { extractSSP, verifyChecksums, verifySignature } from "@skillport/core";
 import { loadConfig } from "../utils/config.js";
 
 export async function publishCommand(sspPath: string): Promise<void> {
@@ -29,6 +31,28 @@ export async function publishCommand(sspPath: string): Promise<void> {
     console.log(chalk.red("No author signature. Sign the package first."));
     process.exitCode = 1;
     return;
+  }
+
+  // Verify signature locally before uploading
+  const keyId = extracted.manifest.author.signing_key_id;
+  const pubKeyPath = join(homedir(), ".skillport", "keys", "default.pub");
+  if (existsSync(pubKeyPath)) {
+    const pubKeyPem = readFileSync(pubKeyPath, "utf-8");
+    const sigValid = verifySignature(
+      extracted.manifestRaw,
+      extracted.authorSignature,
+      pubKeyPem,
+    );
+    if (!sigValid) {
+      console.log(chalk.red("Signature verification failed. Package may have been tampered with after signing."));
+      console.log(chalk.dim(`  Key ID: ${keyId}`));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(chalk.green("✓ Signature verified"));
+  } else {
+    console.log(chalk.yellow("⚠ Local public key not found — skipping local signature check"));
+    console.log(chalk.dim("  Server will verify signature against registered key."));
   }
 
   // Upload to marketplace
