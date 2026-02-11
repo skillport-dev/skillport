@@ -22,13 +22,17 @@ export async function createSSP(options: CreateSSPOptions): Promise<Buffer> {
   // Validate manifest
   ManifestSchema.parse(manifest);
 
-  // Compute checksums for payload files
-  const payloadFiles = new Map<string, Buffer>();
+  // Compute checksums for all files (SKILL.md at root, others under payload/)
+  const checksumFiles = new Map<string, Buffer>();
   for (const [path, content] of files) {
-    payloadFiles.set(`payload/${path}`, content);
+    if (path === "SKILL.md") {
+      checksumFiles.set(path, content);
+    } else {
+      checksumFiles.set(`payload/${path}`, content);
+    }
   }
 
-  const checksums = computeChecksums(payloadFiles);
+  const checksums = computeChecksums(checksumFiles);
 
   // Update manifest hashes
   const finalManifest: Manifest = {

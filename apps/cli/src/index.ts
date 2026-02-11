@@ -32,6 +32,14 @@ program
   .command("export <path>")
   .description("Export a skill directory as a SkillPort package (.ssp)")
   .option("-o, --output <file>", "Output file path")
+  .option("-y, --yes", "Non-interactive mode (include all, skip prompts)")
+  .option("--id <id>", "Skill ID (author-slug/skill-slug)")
+  .option("--name <name>", "Skill name")
+  .option("--description <desc>", "Skill description")
+  .option("--skill-version <ver>", "Skill version (semver)")
+  .option("--author <name>", "Author name")
+  .option("--openclaw-compat <range>", "OpenClaw compatibility range")
+  .option("--os <os...>", "Compatible OS (macos, linux, windows)")
   .action(exportCommand);
 
 program
@@ -49,6 +57,7 @@ program
   .command("install <target>")
   .description("Install a SkillPort package")
   .option("--accept-risk", "Accept high-risk permissions (shell, critical flags)")
+  .option("-y, --yes", "Non-interactive mode (auto-approve, use defaults)")
   .action(installCommand);
 
 program

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -89,7 +89,6 @@ export function appendAuditLog(entry: Record<string, unknown>): void {
   };
   const path = auditLogPath();
   const line = JSON.stringify(logEntry) + "\n";
-  const { appendFileSync } = require("node:fs") as typeof import("node:fs");
   appendFileSync(path, line);
 }
 

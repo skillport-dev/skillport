@@ -1,4 +1,10 @@
-import { generateKeyPairSync, createHash, KeyObject } from "node:crypto";
+import {
+  generateKeyPairSync,
+  createHash,
+  createPublicKey,
+  createPrivateKey,
+  KeyObject,
+} from "node:crypto";
 
 export interface KeyPair {
   publicKey: string; // PEM
@@ -22,11 +28,9 @@ export function computeKeyId(publicKeyPem: string): string {
 }
 
 export function loadPublicKey(pem: string): KeyObject {
-  const { createPublicKey } = require("node:crypto") as typeof import("node:crypto");
   return createPublicKey(pem);
 }
 
 export function loadPrivateKey(pem: string): KeyObject {
-  const { createPrivateKey } = require("node:crypto") as typeof import("node:crypto");
   return createPrivateKey(pem);
 }

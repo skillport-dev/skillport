@@ -44,7 +44,7 @@ export async function extractSSP(data: Buffer): Promise<ExtractedSSP> {
   const skillMdFile = zip.file("SKILL.md");
   const skillMd = skillMdFile ? await skillMdFile.async("string") : null;
 
-  // Extract all payload files
+  // Extract SKILL.md and all payload files
   const files = new Map<string, Buffer>();
   const entries = Object.entries(zip.files);
   for (const [path, entry] of entries) {
@@ -52,7 +52,6 @@ export async function extractSSP(data: Buffer): Promise<ExtractedSSP> {
     if (
       path === "manifest.json" ||
       path === "checksums.json" ||
-      path === "SKILL.md" ||
       path.startsWith("signatures/")
     ) {
       continue;

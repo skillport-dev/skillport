@@ -35,9 +35,13 @@ import {
   detectOS,
 } from "../utils/env-detect.js";
 
+function getSkillsBaseDir(): string {
+  return process.env.OPENCLAW_SKILLS_DIR || join(homedir(), OPENCLAW_SKILLS_DIR);
+}
+
 export async function installCommand(
   target: string,
-  options: { acceptRisk?: boolean },
+  options: { acceptRisk?: boolean; yes?: boolean },
 ): Promise<void> {
   // 1. Load SSP — local file or download from marketplace
   let data: Buffer;
@@ -251,7 +255,7 @@ export async function installCommand(
   let finalSkillMd: string | undefined;
   let finalFiles = extracted.files;
 
-  if (extracted.skillMd) {
+  if (extracted.skillMd && !options.yes) {
     const parsed = parseSkillMd(extracted.skillMd);
 
     if (parsed.sections.length > 1) {
@@ -373,25 +377,26 @@ export async function installCommand(
   }
 
   // Final confirmation
-  const { confirm } = await inquirer.prompt([
-    {
-      type: "confirm",
-      name: "confirm",
-      message: `Install ${manifest.name} v${manifest.version}?`,
-      default: true,
-    },
-  ]);
+  if (!options.yes) {
+    const { confirm } = await inquirer.prompt([
+      {
+        type: "confirm",
+        name: "confirm",
+        message: `Install ${manifest.name} v${manifest.version}?`,
+        default: true,
+      },
+    ]);
 
-  if (!confirm) {
-    console.log("Installation cancelled.");
-    return;
+    if (!confirm) {
+      console.log("Installation cancelled.");
+      return;
+    }
   }
 
-  // 6. Install to ~/.openclaw/skills/
+  // 6. Install to ~/.openclaw/skills/ (or OPENCLAW_SKILLS_DIR if set)
   const [authorSlug, skillSlug] = manifest.id.split("/");
   const installDir = join(
-    homedir(),
-    OPENCLAW_SKILLS_DIR,
+    getSkillsBaseDir(),
     authorSlug,
     skillSlug,
   );
@@ -431,15 +436,25 @@ export async function installCommand(
     });
 
     if (relevantInputs.length > 0) {
-      console.log(chalk.bold("\nRequired configuration:"));
-      const inputAnswers = await inquirer.prompt(
-        relevantInputs.map((input) => ({
-          type: input.type === "secret" ? "password" : "input",
-          name: input.key,
-          message: input.description,
-          default: input.default?.toString(),
-        })),
-      );
+      let inputAnswers: Record<string, string>;
+
+      if (options.yes) {
+        // Use defaults or empty strings in non-interactive mode
+        inputAnswers = {};
+        for (const input of relevantInputs) {
+          inputAnswers[input.key] = input.default?.toString() || "";
+        }
+      } else {
+        console.log(chalk.bold("\nRequired configuration:"));
+        inputAnswers = await inquirer.prompt(
+          relevantInputs.map((input) => ({
+            type: input.type === "secret" ? "password" : "input",
+            name: input.key,
+            message: input.description,
+            default: input.default?.toString(),
+          })),
+        );
+      }
 
       // Save inputs as .env in install dir
       const envContent = Object.entries(inputAnswers)

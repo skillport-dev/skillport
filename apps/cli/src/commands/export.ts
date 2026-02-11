@@ -225,9 +225,21 @@ function displayQualityReport(report: QualityReport): void {
   console.log("");
 }
 
+export interface ExportOptions {
+  output?: string;
+  yes?: boolean;
+  id?: string;
+  name?: string;
+  description?: string;
+  skillVersion?: string;
+  author?: string;
+  openclawCompat?: string;
+  os?: string[];
+}
+
 export async function exportCommand(
   path: string,
-  options: { output?: string },
+  options: ExportOptions,
 ): Promise<void> {
   if (!hasKeys()) {
     console.log(
@@ -248,8 +260,8 @@ export async function exportCommand(
     return;
   }
 
-  // Interactive content selection
-  const selectedFiles = await selectContent(allFiles);
+  // Content selection — skip in non-interactive mode
+  const selectedFiles = options.yes ? allFiles : await selectContent(allFiles);
 
   // ─── Quality Check ───
   console.log("\nRunning quality check...");
@@ -259,17 +271,21 @@ export async function exportCommand(
   displayQualityReport(qualityReport);
 
   if (!qualityReport.passed) {
-    const { continueExport } = await inquirer.prompt([
-      {
-        type: "confirm",
-        name: "continueExport",
-        message: chalk.yellow("Quality issues found. Continue with export?"),
-        default: false,
-      },
-    ]);
-    if (!continueExport) {
-      console.log("Export cancelled. Fix the issues above and try again.");
-      return;
+    if (options.yes) {
+      console.log(chalk.yellow("Quality issues found. Continuing (--yes)."));
+    } else {
+      const { continueExport } = await inquirer.prompt([
+        {
+          type: "confirm",
+          name: "continueExport",
+          message: chalk.yellow("Quality issues found. Continue with export?"),
+          default: false,
+        },
+      ]);
+      if (!continueExport) {
+        console.log("Export cancelled. Fix the issues above and try again.");
+        return;
+      }
     }
   }
 
@@ -301,44 +317,77 @@ export async function exportCommand(
     return;
   }
 
-  // Gather manifest info interactively
+  // Gather manifest info
   const config = loadConfig();
   const publicKey = loadPublicKey();
   const keyId = config.default_key_id || computeKeyId(publicKey);
 
-  const answers = await inquirer.prompt([
-    {
-      type: "input",
-      name: "id",
-      message: "Skill ID (author-slug/skill-slug):",
-      validate: (v: string) =>
-        /^[a-z0-9_-]+\/[a-z0-9_-]+$/.test(v) || "Format: author-slug/skill-slug",
-    },
-    { type: "input", name: "name", message: "Skill name:" },
-    { type: "input", name: "description", message: "Description:" },
-    {
-      type: "input",
-      name: "version",
-      message: "Version:",
-      default: "1.0.0",
-      validate: (v: string) =>
-        /^\d+\.\d+\.\d+$/.test(v) || "Must be semver (x.y.z)",
-    },
-    { type: "input", name: "authorName", message: "Author name:" },
-    {
-      type: "input",
-      name: "openclawCompat",
-      message: "OpenClaw compatibility range:",
-      default: ">=1.0.0",
-    },
-    {
-      type: "checkbox",
-      name: "osCompat",
-      message: "Compatible OS:",
-      choices: ["macos", "linux", "windows"],
-      default: ["macos", "linux"],
-    },
-  ]);
+  let answers: {
+    id: string;
+    name: string;
+    description: string;
+    version: string;
+    authorName: string;
+    openclawCompat: string;
+    osCompat: string[];
+  };
+
+  if (options.yes) {
+    // Non-interactive: require all fields via CLI flags
+    const missing: string[] = [];
+    if (!options.id) missing.push("--id");
+    if (!options.name) missing.push("--name");
+    if (!options.description) missing.push("--description");
+    if (!options.author) missing.push("--author");
+    if (missing.length > 0) {
+      console.log(chalk.red(`Missing required flags for --yes mode: ${missing.join(", ")}`));
+      process.exitCode = 1;
+      return;
+    }
+    answers = {
+      id: options.id!,
+      name: options.name!,
+      description: options.description!,
+      version: options.skillVersion || "1.0.0",
+      authorName: options.author!,
+      openclawCompat: options.openclawCompat || ">=1.0.0",
+      osCompat: options.os || ["macos", "linux"],
+    };
+  } else {
+    answers = await inquirer.prompt([
+      {
+        type: "input",
+        name: "id",
+        message: "Skill ID (author-slug/skill-slug):",
+        validate: (v: string) =>
+          /^[a-z0-9_-]+\/[a-z0-9_-]+$/.test(v) || "Format: author-slug/skill-slug",
+      },
+      { type: "input", name: "name", message: "Skill name:" },
+      { type: "input", name: "description", message: "Description:" },
+      {
+        type: "input",
+        name: "version",
+        message: "Version:",
+        default: "1.0.0",
+        validate: (v: string) =>
+          /^\d+\.\d+\.\d+$/.test(v) || "Must be semver (x.y.z)",
+      },
+      { type: "input", name: "authorName", message: "Author name:" },
+      {
+        type: "input",
+        name: "openclawCompat",
+        message: "OpenClaw compatibility range:",
+        default: ">=1.0.0",
+      },
+      {
+        type: "checkbox",
+        name: "osCompat",
+        message: "Compatible OS:",
+        choices: ["macos", "linux", "windows"],
+        default: ["macos", "linux"],
+      },
+    ]);
+  }
 
   // Build entrypoints from SKILL.md
   const entrypoints = [{ name: "main", file: "SKILL.md" }];
@@ -366,7 +415,7 @@ export async function exportCommand(
       signing_key_id: keyId,
     },
     openclaw_compat: answers.openclawCompat,
-    os_compat: answers.osCompat,
+    os_compat: answers.osCompat as ("macos" | "linux" | "windows")[],
     entrypoints,
     permissions: {
       network: { mode: "none" },
