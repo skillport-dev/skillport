@@ -27,7 +27,7 @@
   ],
   "publishConfig": {
     "access": "public",
-    "tag": "beta"
+    "tag": "latest"
   },
   "scripts": {
     "build": "rm -rf dist && node scripts/bundle.js",
