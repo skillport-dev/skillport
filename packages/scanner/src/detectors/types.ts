@@ -1,4 +1,6 @@
-export type IssueSeverity = "info" | "low" | "medium" | "high" | "critical";
+import type { Severity } from "@skillport/core";
+
+export type IssueSeverity = Severity;
 export type IssueCategory =
   | "secret"
   | "dangerous"

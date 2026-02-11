@@ -7,12 +7,12 @@ await build({
   target: "node18",
   format: "esm",
   outfile: "dist/index.js",
+  minify: true,
+  keepNames: true,
   external: [
     "chalk",
     "commander",
     "inquirer",
-    "ora",
     "zod",
-    "jszip",
   ],
 });
