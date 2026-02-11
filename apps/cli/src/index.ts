@@ -98,8 +98,8 @@ program
   .action(listCommand);
 
 program
-  .command("manage <skill-id> <action>")
-  .description("Manage a skill: publish, unpublish, or delete")
+  .command("manage <skill-id> <action> [args...]")
+  .description("Manage a skill: publish, unpublish, delete, or set-price")
   .action(manageCommand);
 
 program
