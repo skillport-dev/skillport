@@ -21,7 +21,7 @@ const program = new Command();
 program
   .name("skillport")
   .description("SkillPort — open-source secure skill distribution for OpenClaw")
-  .version("1.0.0");
+  .version("1.0.1");
 
 program
   .command("init")
