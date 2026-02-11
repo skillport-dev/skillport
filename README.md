@@ -34,46 +34,22 @@ npm install -g skillport-cli-*.tgz
 skillport --help
 ```
 
-## npm Publishing & dist-tags
+## npm Publishing
 
-The CLI package (`@skillport/cli`) is published to npm.
-
-### Current policy
-
-| Tag | Purpose | When to use |
-|-----|---------|-------------|
-| `beta` | Pre-release builds | Default — all `npm publish` from this repo use `beta` via `publishConfig.tag` |
-| `latest` | Stable release | Only promote manually after verification |
-
-**Why `beta` is the default:**
-The project is pre-1.0. Publishing to `latest` by default risks users running `npm install -g @skillport/cli` and getting an untested build. By defaulting to `beta`, users must opt in with `npm install -g @skillport/cli@beta`.
-
-### Publishing a new beta
+The CLI package (`@skillport/cli`) is published to npm with `publishConfig.tag: "latest"`.
 
 ```bash
 cd apps/cli
-# Bump version in package.json
+# Bump version in package.json + src/index.ts
 pnpm build
-npm publish          # publishes as @beta (via publishConfig)
-```
-
-### Promoting beta to latest
-
-After verifying a beta build works (use `scripts/verify-publish.sh`):
-
-```bash
-# Check current tags
-npm dist-tag ls @skillport/cli
-
-# Promote a specific version to latest
-npm dist-tag add @skillport/cli@0.1.6 latest
+npm publish
 ```
 
 ### Checking what users get
 
 ```bash
-npm info @skillport/cli dist-tags   # shows all tags
-npm info @skillport/cli version     # shows what "latest" resolves to
+npm info @skillport/cli dist-tags
+npm info @skillport/cli version
 ```
 
 ## Publish Verification
