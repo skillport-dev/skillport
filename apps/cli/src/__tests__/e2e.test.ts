@@ -18,7 +18,7 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
   const cli = `node "${join(cliDir, "dist", "index.js")}"`;
   const fixture = join(cliDir, "test-fixtures", "sample-skill");
 
-  function run(cmd: string, extraEnv: Record<string, string> = {}): string {
+  function run(cmd: string, extraEnv: Record<string, string> = {}, timeout = 30_000): string {
     return execSync(cmd, {
       encoding: "utf-8",
       env: {
@@ -27,7 +27,7 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
         OPENCLAW_SKILLS_DIR: skillsDir,
         ...extraEnv,
       },
-      timeout: 30_000,
+      timeout,
     });
   }
 
@@ -72,6 +72,31 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     const out = run(`${cli} dry-run "${sspPath}"`);
     expect(out).toContain("ALL CHECKS PASSED");
   });
+
+  it("login --method token --token saves token without prompts", () => {
+    const out = run(`${cli} login --method token --token test-token-123`);
+    expect(out).toContain("Login successful! Token saved.");
+
+    const configFile = join(tempHome, ".skillport", "config.json");
+    expect(existsSync(configFile)).toBe(true);
+    const config = JSON.parse(readFileSync(configFile, "utf-8"));
+    expect(config.auth_token).toBe("test-token-123");
+  });
+
+  it("login --yes --no-browser prints URL without opening browser", () => {
+    // The process starts a callback server that blocks waiting for auth.
+    // execSync will timeout and throw — we capture stdout from the error.
+    let caught = false;
+    try {
+      run(`${cli} login --yes --no-browser`, {}, 3_000);
+    } catch (e: unknown) {
+      caught = true;
+      const msg = (e as { stdout?: string }).stdout || (e as Error).message || "";
+      expect(msg).toContain("Open this URL in your browser to authenticate:");
+      expect(msg).not.toContain("Login method:");
+    }
+    expect(caught).toBe(true);
+  }, 10_000);
 
   it("install succeeds in non-interactive mode", () => {
     const out = run(`${cli} install "${sspPath}" --yes`);

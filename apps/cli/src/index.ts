@@ -73,6 +73,10 @@ program
 program
   .command("login")
   .description("Authenticate with SkillPort Market")
+  .option("--method <method>", "Login method: browser or token", "browser")
+  .option("--token <token>", "API token (for --method token)")
+  .option("-y, --yes", "Non-interactive mode (skip prompts)")
+  .option("--no-browser", "Print auth URL instead of opening browser")
   .action(loginCommand);
 
 program
