@@ -10,6 +10,8 @@ import { dryRunCommand } from "./commands/dry-run.js";
 import { uninstallCommand } from "./commands/uninstall.js";
 import { loginCommand } from "./commands/login.js";
 import { publishCommand } from "./commands/publish.js";
+import { whoamiCommand } from "./commands/whoami.js";
+import { doctorCommand } from "./commands/doctor.js";
 import { keysRegisterCommand } from "./commands/keys-register.js";
 
 const program = new Command();
@@ -86,6 +88,18 @@ program
   .command("publish <ssp>")
   .description("Publish a SkillPort package to the marketplace")
   .action(publishCommand);
+
+program
+  .command("whoami")
+  .description("Show current configuration and identity")
+  .option("--json", "Output as JSON")
+  .action(whoamiCommand);
+
+program
+  .command("doctor")
+  .description("Check connectivity and setup health")
+  .option("--json", "Output as JSON")
+  .action(doctorCommand);
 
 const keys = program
   .command("keys")

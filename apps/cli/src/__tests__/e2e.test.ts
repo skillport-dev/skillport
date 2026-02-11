@@ -157,6 +157,37 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     }
   }, 10_000);
 
+  it("whoami shows config and key info", () => {
+    const out = run(`${cli} whoami`);
+    expect(out).toContain("SkillPort CLI");
+    expect(out).toContain("Authenticated:");
+    expect(out).toContain("Signing keys:");
+  });
+
+  it("whoami --json returns valid JSON", () => {
+    const out = run(`${cli} whoami --json`);
+    const data = JSON.parse(out);
+    expect(data).toHaveProperty("config_path");
+    expect(data).toHaveProperty("authenticated");
+    expect(data).toHaveProperty("keys_exist");
+    expect(data).toHaveProperty("marketplace_url");
+    expect(data.keys_exist).toBe(true);
+    expect(typeof data.local_key_id).toBe("string");
+  });
+
+  it("doctor checks setup health", () => {
+    const out = run(`${cli} doctor --json`, {}, 15_000);
+    const data = JSON.parse(out);
+    expect(data).toHaveProperty("checks");
+    expect(data).toHaveProperty("ok");
+    expect(Array.isArray(data.checks)).toBe(true);
+    // config, auth, keys should always exist
+    const names = data.checks.map((c: { name: string }) => c.name);
+    expect(names).toContain("config");
+    expect(names).toContain("auth");
+    expect(names).toContain("keys");
+  }, 20_000);
+
   it("install succeeds in non-interactive mode", () => {
     const out = run(`${cli} install "${sspPath}" --yes`);
     expect(out).toContain("Installed: Sample Skill v1.0.0");
