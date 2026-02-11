@@ -1,5 +1,6 @@
-import { createServer } from "node:http";
+import { createServer, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
+import type { AddressInfo } from "node:net";
 import chalk from "chalk";
 import inquirer from "inquirer";
 import { loadConfig, saveConfig, hasKeys, loadPublicKey } from "../utils/config.js";
@@ -9,6 +10,18 @@ interface LoginOptions {
   token?: string;
   yes?: boolean;
   browser?: boolean; // Commander negates --no-browser to browser=false
+  port?: string;
+}
+
+function listenOnPort(server: Server, port: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, () => {
+      server.removeListener("error", reject);
+      const addr = server.address() as AddressInfo;
+      resolve(addr.port);
+    });
+  });
 }
 
 export async function loginCommand(options: LoginOptions): Promise<void> {
@@ -57,9 +70,27 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
   // Browser OAuth flow
   const state = randomBytes(16).toString("hex");
-  const port = 9876;
+  const requestedPort = options.port !== undefined ? parseInt(options.port, 10) : 9876;
+  const userExplicitPort = options.port !== undefined;
 
-  const authUrl = `${config.marketplace_url}/auth/cli?state=${state}&port=${port}`;
+  // Create server and bind to port
+  const server = createServer();
+  let actualPort: number;
+
+  try {
+    actualPort = await listenOnPort(server, requestedPort);
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    if (code === "EADDRINUSE" && !userExplicitPort) {
+      // Retry with OS-assigned free port
+      console.log(chalk.yellow(`Port ${requestedPort} in use, selecting a free port...`));
+      actualPort = await listenOnPort(server, 0);
+    } else {
+      throw err;
+    }
+  }
+
+  const authUrl = `${config.marketplace_url}/auth/cli?state=${state}&port=${actualPort}`;
 
   if (options.browser === false) {
     // --no-browser: print URL only
@@ -77,15 +108,15 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
     exec(`${openCmd} "${authUrl}"`);
   }
 
-  // Start local server to receive callback
+  // Wait for callback
   const token = await new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       server.close();
       reject(new Error("Authentication timed out (60s). Try again or use: skillport login --method token --token <your-token>"));
     }, 60_000);
 
-    const server = createServer(async (req, res) => {
-      const url = new URL(req.url || "", `http://localhost:${port}`);
+    server.on("request", (req, res) => {
+      const url = new URL(req.url || "", `http://localhost:${actualPort}`);
 
       if (url.pathname === "/callback") {
         const callbackState = url.searchParams.get("state");
@@ -111,8 +142,6 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
         resolve(accessToken);
       }
     });
-
-    server.listen(port);
   });
 
   // Exchange for CLI token

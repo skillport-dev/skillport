@@ -16,7 +16,7 @@ const program = new Command();
 program
   .name("skillport")
   .description("SkillPort — secure skill distribution for OpenClaw")
-  .version("0.1.1");
+  .version("0.1.2");
 
 program
   .command("init")
@@ -77,6 +77,7 @@ program
   .option("--token <token>", "API token (for --method token)")
   .option("-y, --yes", "Non-interactive mode (skip prompts)")
   .option("--no-browser", "Print auth URL instead of opening browser")
+  .option("--port <port>", "Callback port (default: 9876, use 0 for auto)")
   .action(loginCommand);
 
 program

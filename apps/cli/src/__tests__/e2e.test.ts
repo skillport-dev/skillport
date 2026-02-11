@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { execSync } from "node:child_process";
+import { createServer } from "node:http";
 import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -83,12 +84,13 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     expect(config.auth_token).toBe("test-token-123");
   });
 
-  it("login --yes --no-browser prints URL without opening browser", () => {
+  it("login --yes --no-browser --port 0 prints URL without opening browser", () => {
+    // --port 0 lets the OS pick a free port, avoiding EADDRINUSE.
     // The process starts a callback server that blocks waiting for auth.
     // execSync will timeout and throw — we capture stdout from the error.
     let caught = false;
     try {
-      run(`${cli} login --yes --no-browser`, {}, 3_000);
+      run(`${cli} login --yes --no-browser --port 0`, {}, 3_000);
     } catch (e: unknown) {
       caught = true;
       const msg = (e as { stdout?: string }).stdout || (e as Error).message || "";
@@ -96,6 +98,27 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
       expect(msg).not.toContain("Login method:");
     }
     expect(caught).toBe(true);
+  }, 10_000);
+
+  it("login retries on EADDRINUSE when port not explicitly set", () => {
+    // Occupy port 9876, then run login without --port flag.
+    // The CLI should detect EADDRINUSE and retry on a free port.
+    const blocker = createServer();
+    blocker.listen(9876);
+    try {
+      let caught = false;
+      try {
+        run(`${cli} login --yes --no-browser`, {}, 3_000);
+      } catch (e: unknown) {
+        caught = true;
+        const msg = (e as { stdout?: string }).stdout || (e as Error).message || "";
+        expect(msg).toContain("Port 9876 in use, selecting a free port...");
+        expect(msg).toContain("Open this URL in your browser to authenticate:");
+      }
+      expect(caught).toBe(true);
+    } finally {
+      blocker.close();
+    }
   }, 10_000);
 
   it("install succeeds in non-interactive mode", () => {
