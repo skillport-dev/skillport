@@ -13,6 +13,8 @@ import { publishCommand } from "./commands/publish.js";
 import { whoamiCommand } from "./commands/whoami.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { keysRegisterCommand } from "./commands/keys-register.js";
+import { listCommand } from "./commands/list.js";
+import { manageCommand } from "./commands/manage.js";
 
 const program = new Command();
 
@@ -88,6 +90,17 @@ program
   .command("publish <ssp>")
   .description("Publish a SkillPort package to the marketplace")
   .action(publishCommand);
+
+program
+  .command("list")
+  .description("List your marketplace skills and their status")
+  .option("--json", "Output as JSON")
+  .action(listCommand);
+
+program
+  .command("manage <skill-id> <action>")
+  .description("Manage a skill: publish, unpublish, or delete")
+  .action(manageCommand);
 
 program
   .command("whoami")
