@@ -23,7 +23,7 @@ describe("Secrets Detector", () => {
 
   it("detects Stripe live keys", () => {
     const issues = scanFileContent(
-      'const key = "sk_live_abc123def456ghi789jkl012";',
+      'const key = "sk_live_REDACTED";',
       "test.ts",
     );
     const stripe = issues.find((i) => i.id === "SEC003");
