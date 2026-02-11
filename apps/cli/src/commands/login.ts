@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import chalk from "chalk";
 import inquirer from "inquirer";
-import { loadConfig, saveConfig, hasKeys, loadPublicKey } from "../utils/config.js";
+import { loadConfig, saveConfig } from "../utils/config.js";
+import { registerPublicKey } from "../utils/register-key.js";
 
 interface LoginOptions {
   method: string;
@@ -11,12 +12,16 @@ interface LoginOptions {
   yes?: boolean;
   browser?: boolean; // Commander negates --no-browser to browser=false
   port?: string;
+  host?: string;
 }
 
-function listenOnPort(server: Server, port: number): Promise<number> {
+const ALLOWED_HOSTS = ["127.0.0.1", "localhost", "::1"];
+const DEFAULT_HOST = "127.0.0.1";
+
+function listenOnPort(server: Server, port: number, host: string): Promise<number> {
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(port, () => {
+    server.listen(port, host, () => {
       server.removeListener("error", reject);
       const addr = server.address() as AddressInfo;
       resolve(addr.port);
@@ -46,8 +51,8 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
         name: "method",
         message: "Login method:",
         choices: [
+          { name: "Paste CLI token (recommended)", value: "token" },
           { name: "Browser (GitHub OAuth)", value: "browser" },
-          { name: "Paste API token", value: "token" },
         ],
       },
     ]);
@@ -56,14 +61,26 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
   if (method === "token") {
     let token = options.token;
+    if (!token && options.yes) {
+      console.error(chalk.red("Error: --token is required in non-interactive mode."));
+      console.log(chalk.dim("  Get your token at: https://skillport.market/auth/cli-token"));
+      process.exitCode = 1;
+      return;
+    }
     if (!token) {
+      console.log(chalk.dim("Get your token at: https://skillport.market/auth/cli-token"));
+      console.log();
       const answer = await inquirer.prompt([
-        { type: "password", name: "token", message: "Enter your API token:" },
+        { type: "password", name: "token", message: "Enter your CLI token:" },
       ]);
       token = answer.token;
     }
     config.auth_token = token;
     saveConfig(config);
+
+    // Auto-register public key if available
+    await registerPublicKey(config);
+
     console.log(chalk.green("Login successful! Token saved."));
     return;
   }
@@ -72,25 +89,28 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
   const state = randomBytes(16).toString("hex");
   const requestedPort = options.port !== undefined ? parseInt(options.port, 10) : 9876;
   const userExplicitPort = options.port !== undefined;
+  const bindHost = options.host || DEFAULT_HOST;
 
-  // Create server and bind to port
+  // Create server and bind to host:port
   const server = createServer();
   let actualPort: number;
 
   try {
-    actualPort = await listenOnPort(server, requestedPort);
+    actualPort = await listenOnPort(server, requestedPort, bindHost);
   } catch (err: unknown) {
     const code = (err as { code?: string }).code;
     if (code === "EADDRINUSE" && !userExplicitPort) {
       // Retry with OS-assigned free port
       console.log(chalk.yellow(`Port ${requestedPort} in use, selecting a free port...`));
-      actualPort = await listenOnPort(server, 0);
+      actualPort = await listenOnPort(server, 0, bindHost);
     } else {
       throw err;
     }
   }
 
-  const authUrl = `${config.marketplace_web_url}/auth/cli?state=${state}&port=${actualPort}`;
+  // Use the bind host for the callback URL sent to the web app
+  const callbackHost = bindHost === "::1" ? "[::1]" : bindHost;
+  const authUrl = `${config.marketplace_web_url}/auth/cli?state=${state}&port=${actualPort}&host=${encodeURIComponent(callbackHost)}`;
 
   if (options.browser === false) {
     // --no-browser: print URL only
@@ -98,9 +118,11 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
     console.log();
     console.log(`  ${authUrl}`);
     console.log();
+    console.log(chalk.dim(`Listening on ${callbackHost}:${actualPort}`));
     console.log(chalk.dim("Waiting for authentication callback..."));
   } else {
     console.log(chalk.dim(`Opening browser to: ${authUrl}`));
+    console.log(chalk.dim(`Listening on ${callbackHost}:${actualPort}`));
     console.log(chalk.dim("Waiting for authentication..."));
 
     const { exec } = await import("node:child_process");
@@ -112,11 +134,17 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
   const token = await new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       server.close();
-      reject(new Error("Authentication timed out (60s). Try again or use: skillport login --method token --token <your-token>"));
+      reject(new Error(
+        `Authentication timed out (60s).\n` +
+        `  Listened on: ${callbackHost}:${actualPort}\n` +
+        `  Self-test:   curl http://${callbackHost}:${actualPort}/callback?state=test\\&token=test\n` +
+        `  Retry:       skillport login --yes --no-browser --port 0 --host 127.0.0.1\n` +
+        `  Or use:      skillport login --method token --token <your-token>`,
+      ));
     }, 60_000);
 
     server.on("request", (req, res) => {
-      const url = new URL(req.url || "", `http://localhost:${actualPort}`);
+      const url = new URL(req.url || "", `http://${callbackHost}:${actualPort}`);
 
       if (url.pathname === "/callback") {
         const callbackState = url.searchParams.get("state");
@@ -170,22 +198,7 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
   saveConfig(config);
 
   // Auto-register public key if available
-  if (hasKeys()) {
-    try {
-      const publicKey = loadPublicKey();
-      await fetch(`${config.marketplace_url}/v1/keys`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.auth_token}`,
-        },
-        body: JSON.stringify({ public_key_pem: publicKey, label: "default" }),
-      });
-      console.log(chalk.dim("  Public key registered with marketplace."));
-    } catch {
-      // Non-critical
-    }
-  }
+  await registerPublicKey(config);
 
   console.log(chalk.green("Login successful! Token saved."));
 }

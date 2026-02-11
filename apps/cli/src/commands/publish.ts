@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import chalk from "chalk";
 import { extractSSP, verifyChecksums, verifySignature } from "@skillport/core";
-import { loadConfig } from "../utils/config.js";
+import { loadConfig, hasKeys } from "../utils/config.js";
+import { registerPublicKey } from "../utils/register-key.js";
 
 export async function publishCommand(sspPath: string): Promise<void> {
   const config = loadConfig();
@@ -58,23 +59,43 @@ export async function publishCommand(sspPath: string): Promise<void> {
   // Upload to marketplace
   console.log("Uploading to marketplace...");
 
-  try {
+  async function upload(): Promise<Response> {
     const formData = new FormData();
     formData.append("file", new Blob([data]), sspPath.split("/").pop());
-
-    const response = await fetch(`${config.marketplace_url}/v1/skills`, {
+    return fetch(`${config.marketplace_url}/v1/skills`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.auth_token}`,
-      },
+      headers: { Authorization: `Bearer ${config.auth_token}` },
       body: formData,
     });
+  }
 
+  try {
+    let response = await upload();
+
+    // Auto-heal: register key and retry if not registered
     if (!response.ok) {
-      const errorBody = await response.json() as Record<string, unknown>;
-      console.log(chalk.red(`Upload failed: ${errorBody.error || response.statusText}`));
-      process.exitCode = 1;
-      return;
+      const errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+      const errorMsg = String(errorBody.error || "");
+
+      if (errorMsg.includes("Signing key is not registered") && hasKeys()) {
+        console.log(chalk.yellow("Signing key not registered. Registering automatically..."));
+        const registered = await registerPublicKey(config);
+        if (registered) {
+          console.log("Retrying upload...");
+          response = await upload();
+        } else {
+          console.log(chalk.red("Could not register key. Run 'skillport keys register' manually."));
+          process.exitCode = 1;
+          return;
+        }
+      }
+
+      if (!response.ok) {
+        const retryBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+        console.log(chalk.red(`Upload failed: ${retryBody.error || response.statusText}`));
+        process.exitCode = 1;
+        return;
+      }
     }
 
     const result = await response.json() as {

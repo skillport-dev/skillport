@@ -74,9 +74,11 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     expect(out).toContain("ALL CHECKS PASSED");
   });
 
-  it("login --method token --token saves token without prompts", () => {
+  it("login --method token --token saves token and attempts key registration", () => {
     const out = run(`${cli} login --method token --token test-token-123`);
     expect(out).toContain("Login successful! Token saved.");
+    // Key registration is attempted (will warn since API isn't reachable, but shouldn't fail login)
+    expect(out).toMatch(/Public key registered|Warning: Could not/);
 
     const configFile = join(tempHome, ".skillport", "config.json");
     expect(existsSync(configFile)).toBe(true);
@@ -84,10 +86,37 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     expect(config.auth_token).toBe("test-token-123");
   });
 
-  it("login --yes --no-browser --port 0 prints URL using web domain", () => {
-    // --port 0 lets the OS pick a free port, avoiding EADDRINUSE.
-    // The process starts a callback server that blocks waiting for auth.
-    // execSync will timeout and throw — we capture stdout from the error.
+  it("keys register requires login", () => {
+    // Use a fresh HOME with no config/keys to test error
+    const freshHome = mkdtempSync(join(tmpdir(), "skillport-keys-"));
+    try {
+      const out = execSync(`${cli} keys register`, {
+        encoding: "utf-8",
+        env: { ...process.env, HOME: freshHome },
+      });
+      expect(out).toContain("Not logged in");
+    } catch (e: unknown) {
+      // Commander exits with code 1, which throws
+      const msg = (e as { stdout?: string }).stdout || (e as Error).message || "";
+      expect(msg).toContain("Not logged in");
+    } finally {
+      rmSync(freshHome, { recursive: true, force: true });
+    }
+  });
+
+  it("keys register runs after init + login (warns when API unavailable)", () => {
+    // Keys exist from earlier init, token exists from earlier login
+    // API is not running, so registration will warn and exit non-zero
+    try {
+      const out = run(`${cli} keys register`);
+      expect(out).toMatch(/Public key registered|Warning: Could not/);
+    } catch (e: unknown) {
+      const msg = (e as { stdout?: string }).stdout || (e as Error).message || "";
+      expect(msg).toMatch(/Public key registered|Warning: Could not/);
+    }
+  });
+
+  it("login --yes --no-browser --port 0 prints URL with host and binds to 127.0.0.1", () => {
     let caught = false;
     try {
       run(`${cli} login --yes --no-browser --port 0`, {}, 3_000);
@@ -99,15 +128,19 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
       // Auth URL must point to web domain, not API domain
       expect(msg).toContain("https://skillport.market/auth/cli?");
       expect(msg).not.toContain("api.skillport.market/auth/cli");
+      // Must include host param for the web callback
+      expect(msg).toContain("host=127.0.0.1");
+      // Must show what it's listening on
+      expect(msg).toContain("Listening on 127.0.0.1:");
     }
     expect(caught).toBe(true);
   }, 10_000);
 
-  it("login retries on EADDRINUSE when port not explicitly set", () => {
-    // Occupy port 9876, then run login without --port flag.
+  it("login retries on EADDRINUSE when port not explicitly set", async () => {
+    // Occupy port 9876 on 127.0.0.1, then run login without --port flag.
     // The CLI should detect EADDRINUSE and retry on a free port.
     const blocker = createServer();
-    blocker.listen(9876);
+    await new Promise<void>((resolve) => blocker.listen(9876, "127.0.0.1", resolve));
     try {
       let caught = false;
       try {

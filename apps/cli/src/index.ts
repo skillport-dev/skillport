@@ -10,13 +10,14 @@ import { dryRunCommand } from "./commands/dry-run.js";
 import { uninstallCommand } from "./commands/uninstall.js";
 import { loginCommand } from "./commands/login.js";
 import { publishCommand } from "./commands/publish.js";
+import { keysRegisterCommand } from "./commands/keys-register.js";
 
 const program = new Command();
 
 program
   .name("skillport")
   .description("SkillPort — secure skill distribution for OpenClaw")
-  .version("0.1.3");
+  .version("0.1.6");
 
 program
   .command("init")
@@ -78,11 +79,21 @@ program
   .option("-y, --yes", "Non-interactive mode (skip prompts)")
   .option("--no-browser", "Print auth URL instead of opening browser")
   .option("--port <port>", "Callback port (default: 9876, use 0 for auto)")
+  .option("--host <host>", "Callback host (default: 127.0.0.1)")
   .action(loginCommand);
 
 program
   .command("publish <ssp>")
   .description("Publish a SkillPort package to the marketplace")
   .action(publishCommand);
+
+const keys = program
+  .command("keys")
+  .description("Manage signing keys");
+
+keys
+  .command("register")
+  .description("Register your public signing key with the marketplace")
+  .action(keysRegisterCommand);
 
 program.parse();
