@@ -7,6 +7,7 @@ dist/
 .env.local
 .env.*
 coverage/
+*.tgz
 API_KEYS
 .next/
 .claude/
