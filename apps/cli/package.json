@@ -1,16 +1,16 @@
 {
   "name": "@skillport/cli",
   "version": "0.1.6",
-  "description": "SkillPort CLI — secure skill distribution for OpenClaw. Export, scan, sign, and install AI skill packages.",
+  "description": "SkillPort CLI — open-source secure skill distribution for OpenClaw. Export, scan, sign, and install AI skill packages.",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/my-name-is-yu/skillport.git",
+    "url": "https://github.com/skillport-dev/skillport.git",
     "directory": "apps/cli"
   },
   "homepage": "https://skillport.market",
-  "bugs": "https://github.com/my-name-is-yu/skillport/issues",
+  "bugs": "https://github.com/skillport-dev/skillport/issues",
   "keywords": [
     "skillport",
     "openclaw",
