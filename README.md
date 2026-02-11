@@ -42,6 +42,18 @@ npm install -g skillport-cli-*.tgz
 skillport --help
 ```
 
+## Monetize Your Skills
+
+Sell your OpenClaw skills on [SkillPort Market](https://skillport.market). Set your own price, and buyers pay in their local currency via Stripe.
+
+```bash
+skillport init                          # generate signing keys
+skillport export ./my-skill -o out.ssp  # package with security scan
+skillport login && skillport publish out.ssp --price 999  # publish at $9.99
+```
+
+See the [Monetize Guide](https://skillport.market/docs/monetize) for details.
+
 ## Marketplace
 
 The hosted marketplace is available at [skillport.market](https://skillport.market).
