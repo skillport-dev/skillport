@@ -8,6 +8,8 @@ export {
   SP_CONFIG_FILE,
   SP_REGISTRY_FILE,
   OPENCLAW_SKILLS_DIR,
+  CLAUDE_CODE_SKILLS_DIR,
+  SKILL_PLATFORMS,
   DEFAULT_MARKETPLACE_URL,
   DEFAULT_MARKETPLACE_WEB_URL,
   RATE_LIMITS,
@@ -19,6 +21,7 @@ export {
 } from "./constants.js";
 export type {
   SkillCategory,
+  SkillPlatform,
   SkillStatus,
   VersionStatus,
   ReportReason,

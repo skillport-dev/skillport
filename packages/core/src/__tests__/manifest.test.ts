@@ -88,4 +88,52 @@ describe("ManifestSchema", () => {
     const result = ManifestSchema.safeParse(m);
     expect(result.success).toBe(false);
   });
+
+  // --- Platform field tests ---
+  it("defaults platform to openclaw when omitted", () => {
+    const result = ManifestSchema.safeParse(validManifest());
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.platform).toBe("openclaw");
+    }
+  });
+
+  it("accepts platform: claude-code with claude_code metadata", () => {
+    const m = {
+      ...validManifest(),
+      platform: "claude-code",
+      claude_code: {
+        user_invocable: true,
+        allowed_tools: ["Read", "Grep"],
+        argument_hint: "[file-path]",
+        context: "fork" as const,
+      },
+    };
+    const result = ManifestSchema.safeParse(m);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts platform: universal with both metadata", () => {
+    const m = {
+      ...validManifest(),
+      platform: "universal",
+      openclaw: { requires: ">=1.0.0", install_steps: ["npm install foo"] },
+      claude_code: { user_invocable: true, allowed_tools: ["Read"] },
+    };
+    const result = ManifestSchema.safeParse(m);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects invalid platform value", () => {
+    const m = { ...validManifest(), platform: "invalid" };
+    const result = ManifestSchema.safeParse(m);
+    expect(result.success).toBe(false);
+  });
+
+  it("backward compat: openclaw_compat is optional", () => {
+    const m = validManifest();
+    delete (m as Record<string, unknown>).openclaw_compat;
+    const result = ManifestSchema.safeParse(m);
+    expect(result.success).toBe(true);
+  });
 });

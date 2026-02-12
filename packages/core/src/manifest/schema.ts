@@ -74,6 +74,23 @@ export const AuthorSchema = z.object({
   signing_key_id: z.string(),
 });
 
+export const PlatformEnum = z.enum(["openclaw", "claude-code", "universal"]);
+
+export const ClaudeCodeMetaSchema = z.object({
+  user_invocable: z.boolean().default(true),
+  allowed_tools: z.array(z.string()).optional(),
+  argument_hint: z.string().optional(),
+  context: z.literal("fork").optional(),
+  agent: z.string().optional(),
+  model: z.enum(["sonnet", "opus", "haiku", "inherit"]).default("inherit"),
+  has_dynamic_context: z.boolean().default(false),
+});
+
+export const OpenClawMetaSchema = z.object({
+  requires: z.string().optional(),
+  install_steps: z.array(z.string()).optional(),
+});
+
 export const ManifestSchema = z.object({
   ssp_version: z.literal("1.0"),
   id: z
@@ -83,9 +100,13 @@ export const ManifestSchema = z.object({
   description: z.string().min(1).max(1000),
   version: z.string().regex(semverRegex, "Must be valid semver (x.y.z)"),
   author: AuthorSchema,
+  platform: PlatformEnum.default("openclaw"),
   openclaw_compat: z
     .string()
-    .regex(semverRangeRegex, "Must be a valid semver range"),
+    .regex(semverRangeRegex, "Must be a valid semver range")
+    .optional(),
+  claude_code: ClaudeCodeMetaSchema.optional(),
+  openclaw: OpenClawMetaSchema.optional(),
   os_compat: z.array(z.enum(["macos", "linux", "windows"])).min(1),
   entrypoints: z.array(EntrypointSchema).min(1),
   permissions: PermissionsSchema,
@@ -97,6 +118,9 @@ export const ManifestSchema = z.object({
 });
 
 export type Manifest = z.infer<typeof ManifestSchema>;
+export type Platform = z.infer<typeof PlatformEnum>;
+export type ClaudeCodeMeta = z.infer<typeof ClaudeCodeMetaSchema>;
+export type OpenClawMeta = z.infer<typeof OpenClawMetaSchema>;
 export type Entrypoint = z.infer<typeof EntrypointSchema>;
 export type Permissions = z.infer<typeof PermissionsSchema>;
 export type NetworkPermission = z.infer<typeof NetworkPermissionSchema>;

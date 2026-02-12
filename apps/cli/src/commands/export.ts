@@ -414,6 +414,7 @@ export async function exportCommand(
       name: answers.authorName,
       signing_key_id: keyId,
     },
+    platform: "openclaw",
     openclaw_compat: answers.openclawCompat,
     os_compat: answers.osCompat as ("macos" | "linux" | "windows")[],
     entrypoints,

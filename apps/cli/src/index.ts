@@ -15,12 +15,13 @@ import { doctorCommand } from "./commands/doctor.js";
 import { keysRegisterCommand } from "./commands/keys-register.js";
 import { listCommand } from "./commands/list.js";
 import { manageCommand } from "./commands/manage.js";
+import { convertCommand } from "./commands/convert.js";
 
 const program = new Command();
 
 program
   .name("skillport")
-  .description("SkillPort — open-source secure skill distribution for OpenClaw")
+  .description("SkillPort — secure skill distribution for OpenClaw & Claude Code")
   .version("1.0.1");
 
 program
@@ -63,7 +64,21 @@ program
   .description("Install a SkillPort package")
   .option("--accept-risk", "Accept high-risk permissions (shell, critical flags)")
   .option("-y, --yes", "Non-interactive mode (auto-approve, use defaults)")
+  .option("--project", "Install to project-local .claude/skills/ (Claude Code only)")
+  .option("--global", "Install to user-global directory (default for both platforms)")
   .action(installCommand);
+
+program
+  .command("convert <source>")
+  .description("Convert a skill between OpenClaw and Claude Code formats")
+  .requiredOption("--to <platform>", "Target platform (openclaw | claude-code | universal)")
+  .option("-o, --output <path>", "Output directory path")
+  .option("--preserve-meta", "Preserve platform-specific metadata as comments", true)
+  .option("--no-preserve-meta", "Strip platform-specific metadata")
+  .option("--infer-tools", "Infer allowed-tools from body content (CC conversion)", false)
+  .option("--dry-run", "Preview conversion without writing files", false)
+  .option("-y, --yes", "Non-interactive mode")
+  .action(convertCommand);
 
 program
   .command("dry-run <ssp>")

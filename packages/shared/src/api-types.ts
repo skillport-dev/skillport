@@ -1,6 +1,6 @@
 import type { Manifest } from "@skillport/core";
 import type { ScanReport } from "@skillport/scanner";
-import type { SkillCategory, SkillStatus, VersionStatus, ReportReason, ReportStatus } from "./constants.js";
+import type { SkillCategory, SkillPlatform, SkillStatus, VersionStatus, ReportReason, ReportStatus } from "./constants.js";
 
 // ---- Auth ----
 export interface TokenExchangeRequest {
@@ -21,6 +21,7 @@ export interface CLITokenRequest {
 export interface SkillListQuery {
   q?: string;
   category?: SkillCategory;
+  platform?: SkillPlatform | "all";
   os?: string;
   min_rating?: number;
   max_price?: number;
@@ -37,6 +38,7 @@ export interface SkillSummary {
   author: { username: string; display_name: string };
   price: number;
   category: SkillCategory;
+  platform: SkillPlatform;
   tags: string[];
   latest_version: string;
   risk_score: number;

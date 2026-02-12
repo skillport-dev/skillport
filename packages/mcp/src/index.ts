@@ -28,6 +28,7 @@ interface SkillSummary {
   profiles?: { username: string; display_name: string };
   price: number;
   category: string;
+  platform: string;
   tags: string[];
   latest_version: string;
   risk_score: number;
@@ -65,17 +66,19 @@ const server = new McpServer({
 
 server.tool(
   "search_skills",
-  "Search for skills on SkillPort Market by keyword, category, or other criteria",
+  "Search for skills on SkillPort Market by keyword, category, platform, or other criteria",
   {
     query: z.string().optional().describe("Search keyword"),
     category: z.enum(SKILL_CATEGORIES as unknown as [string, ...string[]]).optional().describe("Filter by category"),
+    platform: z.enum(["openclaw", "claude-code", "universal", "all"]).optional().describe("Filter by platform (default: all)"),
     sort: z.enum(["popular", "recent", "rating", "price"]).optional().describe("Sort order"),
     page: z.number().optional().describe("Page number (default 1)"),
   },
-  async ({ query, category, sort, page }) => {
+  async ({ query, category, platform, sort, page }) => {
     const params = new URLSearchParams();
     if (query) params.set("q", query);
     if (category) params.set("category", category);
+    if (platform) params.set("platform", platform);
     if (sort) params.set("sort", sort);
     if (page) params.set("page", String(page));
     params.set("per_page", "10");
@@ -83,11 +86,11 @@ server.tool(
     const data = await apiFetch<SkillsResponse>(`/skills?${params}`);
 
     const results = data.data.map((s) =>
-      `**${s.title}** (${s.ssp_id})\n` +
+      `**${s.title}** (${s.ssp_id}) [${s.platform || "openclaw"}]\n` +
       `  ${s.description}\n` +
       `  Risk: ${s.risk_score}/100 | Rating: ${s.avg_rating?.toFixed(1) || "N/A"} | Downloads: ${s.downloads}\n` +
       `  Category: ${s.category} | Price: ${s.price === 0 ? "Free" : `$${(s.price / 100).toFixed(2)}`}\n` +
-      `  OS: ${s.os_compat?.join(", ") || "all"} | Tags: ${s.tags?.join(", ") || "none"}`
+      `  Platform: ${s.platform || "openclaw"} | OS: ${s.os_compat?.join(", ") || "all"} | Tags: ${s.tags?.join(", ") || "none"}`
     ).join("\n\n");
 
     return {
@@ -199,17 +202,25 @@ server.tool(
     let cmd = `skillport install ${skill.ssp_id}@${ver}`;
     if (accept_risk) cmd += " --accept-risk";
 
+    const platform = (skill as unknown as { platform?: string }).platform || "openclaw";
+    const installDest = platform === "claude-code"
+      ? "~/.claude/skills/"
+      : platform === "universal"
+        ? "platform-dependent directory"
+        : "~/.openclaw/skills/";
+
     const text =
       `Install **${skill.title}** v${ver}:\n\n` +
       "```bash\n" +
       `${cmd}\n` +
       "```\n\n" +
+      `Platform: ${platform}\n\n` +
       `This will:\n` +
       `1. Download the package from SkillPort Market\n` +
       `2. Verify checksums and signatures\n` +
       `3. Run a local security scan\n` +
       `4. Show permissions for your approval\n` +
-      `5. Install to ~/.openclaw/skills/`;
+      `5. Install to ${installDest}`;
 
     return { content: [{ type: "text" as const, text }] };
   },

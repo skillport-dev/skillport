@@ -1,6 +1,9 @@
 // Manifest
 export {
   ManifestSchema,
+  PlatformEnum,
+  ClaudeCodeMetaSchema,
+  OpenClawMetaSchema,
   EntrypointSchema,
   PermissionsSchema,
   NetworkPermissionSchema,
@@ -16,6 +19,9 @@ export {
 } from "./manifest/schema.js";
 export type {
   Manifest,
+  Platform,
+  ClaudeCodeMeta,
+  OpenClawMeta,
   Entrypoint,
   Permissions,
   NetworkPermission,
@@ -29,6 +35,21 @@ export type {
   Author,
   Severity,
 } from "./manifest/schema.js";
+
+// Convert
+export {
+  detectPlatform,
+  convertToClaudeCode,
+  convertToOpenClaw,
+  convertToUniversal,
+  extractPlatformMeta,
+  embedPlatformMeta,
+} from "./convert/index.js";
+export type {
+  ConvertOptions,
+  ConvertResult,
+  ConvertWarning,
+} from "./convert/index.js";
 
 // Crypto
 export { generateKeyPair, computeKeyId } from "./crypto/keys.js";

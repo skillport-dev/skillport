@@ -8,6 +8,15 @@ export const SP_CONFIG_FILE = "config.json";
 export const SP_REGISTRY_FILE = "installed/registry.json";
 
 export const OPENCLAW_SKILLS_DIR = ".openclaw/skills";
+export const CLAUDE_CODE_SKILLS_DIR = ".claude/skills";
+
+export const SKILL_PLATFORMS = [
+  "openclaw",
+  "claude-code",
+  "universal",
+] as const;
+
+export type SkillPlatform = (typeof SKILL_PLATFORMS)[number];
 
 export const DEFAULT_MARKETPLACE_URL = "https://api.skillport.market";
 export const DEFAULT_MARKETPLACE_WEB_URL = "https://skillport.market";

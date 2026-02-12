@@ -14,6 +14,7 @@ function testManifest(keyId: string): Manifest {
       name: "Test Author",
       signing_key_id: keyId,
     },
+    platform: "openclaw",
     openclaw_compat: ">=1.0.0",
     os_compat: ["macos", "linux"],
     entrypoints: [{ name: "main", file: "SKILL.md" }],

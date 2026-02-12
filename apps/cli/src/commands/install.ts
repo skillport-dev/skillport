@@ -8,12 +8,13 @@ import {
   verifyChecksums,
   assessPermissions,
 } from "@skillport/core";
+import type { Platform } from "@skillport/core";
 import {
   scanFiles,
   generateReport,
   isScannable,
 } from "@skillport/scanner";
-import { OPENCLAW_SKILLS_DIR } from "@skillport/shared";
+import { OPENCLAW_SKILLS_DIR, CLAUDE_CODE_SKILLS_DIR } from "@skillport/shared";
 import {
   loadRegistry,
   saveRegistry,
@@ -35,14 +36,58 @@ import {
   detectOS,
 } from "../utils/env-detect.js";
 
-function getSkillsBaseDir(): string {
-  return process.env.OPENCLAW_SKILLS_DIR || join(homedir(), OPENCLAW_SKILLS_DIR);
+function getSkillsBaseDir(platform: Platform, options: { project?: boolean } = {}): string {
+  switch (platform) {
+    case "claude-code":
+      if (options.project) {
+        return join(".claude", "skills");
+      }
+      return process.env.CLAUDE_SKILLS_DIR || join(homedir(), CLAUDE_CODE_SKILLS_DIR);
+    case "openclaw":
+    default:
+      return process.env.OPENCLAW_SKILLS_DIR || join(homedir(), OPENCLAW_SKILLS_DIR);
+  }
+}
+
+async function detectInstallPlatform(
+  platform: Platform,
+  nonInteractive: boolean,
+): Promise<"openclaw" | "claude-code"> {
+  if (platform !== "universal") return platform === "claude-code" ? "claude-code" : "openclaw";
+
+  const hasOpenClaw = existsSync(join(homedir(), ".openclaw"));
+  const hasClaudeCode = existsSync(join(homedir(), ".claude"));
+
+  if (hasOpenClaw && !hasClaudeCode) return "openclaw";
+  if (hasClaudeCode && !hasOpenClaw) return "claude-code";
+
+  if (nonInteractive) return "openclaw"; // default
+
+  const { choice } = await inquirer.prompt([
+    {
+      type: "list",
+      name: "choice",
+      message: "This is a universal skill. Install for which platform?",
+      choices: [
+        { name: "OpenClaw (~/.openclaw/skills/)", value: "openclaw" },
+        { name: "Claude Code (~/.claude/skills/)", value: "claude-code" },
+      ],
+    },
+  ]);
+  return choice;
 }
 
 export async function installCommand(
   target: string,
-  options: { acceptRisk?: boolean; yes?: boolean },
+  options: { acceptRisk?: boolean; yes?: boolean; project?: boolean; global?: boolean },
 ): Promise<void> {
+  // --project and --global are mutually exclusive
+  if (options.project && options.global) {
+    console.log(chalk.red("--project and --global are mutually exclusive."));
+    process.exitCode = 1;
+    return;
+  }
+
   // 1. Load SSP — local file or download from marketplace
   let data: Buffer;
   if (existsSync(target)) {
@@ -394,13 +439,20 @@ export async function installCommand(
     }
   }
 
-  // 6. Install to ~/.openclaw/skills/ (or OPENCLAW_SKILLS_DIR if set)
+  // 6. Install — determine platform and directory
+  const manifestPlatform = ((manifest as Record<string, unknown>).platform as Platform) || "openclaw";
+  const installPlatform = await detectInstallPlatform(manifestPlatform, !!options.yes);
+
+  if (installPlatform === "claude-code") {
+    console.log(chalk.dim(`Installing as Claude Code skill${options.project ? " (project-local)" : " (user global)"}`));
+  }
+
   const [authorSlug, skillSlug] = manifest.id.split("/");
-  const installDir = join(
-    getSkillsBaseDir(),
-    authorSlug,
-    skillSlug,
-  );
+
+  // Claude Code uses skill-slug as dir name (flat), OpenClaw uses author/skill
+  const installDir = installPlatform === "claude-code"
+    ? join(getSkillsBaseDir("claude-code", { project: options.project }), skillSlug)
+    : join(getSkillsBaseDir("openclaw"), authorSlug, skillSlug);
   mkdirSync(installDir, { recursive: true });
 
   // Write manifest
