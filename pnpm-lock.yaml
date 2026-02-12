@@ -47,6 +47,9 @@ importers:
       stripe:
         specifier: ^20.3.1
         version: 20.3.1(@types/node@22.19.10)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
