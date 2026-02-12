@@ -51,3 +51,24 @@ export const VERSION_STATUS = [
 ] as const;
 
 export type VersionStatus = (typeof VERSION_STATUS)[number];
+
+export const REPORT_REASONS = [
+  "malware",
+  "impersonation",
+  "copyright",
+  "fraud",
+  "vulnerability",
+  "tos_violation",
+  "other",
+] as const;
+
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+export const REPORT_STATUS = [
+  "open",
+  "triaged",
+  "resolved",
+  "dismissed",
+] as const;
+
+export type ReportStatus = (typeof REPORT_STATUS)[number];

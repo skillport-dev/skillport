@@ -1,6 +1,6 @@
 import type { Manifest } from "@skillport/core";
 import type { ScanReport } from "@skillport/scanner";
-import type { SkillCategory, SkillStatus, VersionStatus } from "./constants.js";
+import type { SkillCategory, SkillStatus, VersionStatus, ReportReason, ReportStatus } from "./constants.js";
 
 // ---- Auth ----
 export interface TokenExchangeRequest {
@@ -126,6 +126,35 @@ export interface PaginatedResponse<T> {
   page: number;
   per_page: number;
   total_pages: number;
+}
+
+// ---- Reports ----
+export interface CreateReportRequest {
+  reason: ReportReason;
+  comment?: string;
+}
+
+export interface ReportSummary {
+  id: string;
+  skill_id: string;
+  reporter_id: string;
+  reason: ReportReason;
+  status: ReportStatus;
+  created_at: string;
+  skills?: { id: string; title: string; ssp_id: string };
+  profiles?: { username: string; display_name: string };
+}
+
+export interface ReportDetail extends ReportSummary {
+  comment: string;
+  admin_notes: string;
+  resolved_by: string | null;
+  updated_at: string;
+}
+
+export interface UpdateReportRequest {
+  status?: ReportStatus;
+  admin_notes?: string;
 }
 
 // ---- Error ----

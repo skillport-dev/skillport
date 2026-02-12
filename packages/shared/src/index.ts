@@ -14,11 +14,15 @@ export {
   SKILL_CATEGORIES,
   SKILL_STATUS,
   VERSION_STATUS,
+  REPORT_REASONS,
+  REPORT_STATUS,
 } from "./constants.js";
 export type {
   SkillCategory,
   SkillStatus,
   VersionStatus,
+  ReportReason,
+  ReportStatus,
 } from "./constants.js";
 
 export type {
@@ -40,4 +44,8 @@ export type {
   RegisteredKey,
   PaginatedResponse,
   APIError,
+  CreateReportRequest,
+  ReportSummary,
+  ReportDetail,
+  UpdateReportRequest,
 } from "./api-types.js";
