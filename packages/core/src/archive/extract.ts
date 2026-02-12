@@ -11,6 +11,8 @@ export interface ExtractedSSP {
   skillMd: string | null;
 }
 
+const MAX_UNCOMPRESSED_SIZE = 500 * 1024 * 1024; // 500 MB
+
 export async function extractSSP(data: Buffer): Promise<ExtractedSSP> {
   const zip = await JSZip.loadAsync(data);
 
@@ -47,8 +49,15 @@ export async function extractSSP(data: Buffer): Promise<ExtractedSSP> {
   // Extract SKILL.md and all payload files
   const files = new Map<string, Buffer>();
   const entries = Object.entries(zip.files);
+  let totalUncompressed = 0;
   for (const [path, entry] of entries) {
     if (entry.dir) continue;
+
+    // Zip Slip protection: reject paths with traversal
+    if (path.includes("..") || path.startsWith("/") || path.includes("\\")) {
+      throw new Error(`Zip slip detected: unsafe path "${path}"`);
+    }
+
     if (
       path === "manifest.json" ||
       path === "checksums.json" ||
@@ -57,6 +66,13 @@ export async function extractSSP(data: Buffer): Promise<ExtractedSSP> {
       continue;
     }
     const content = await entry.async("nodebuffer");
+
+    // Decompression bomb protection
+    totalUncompressed += content.length;
+    if (totalUncompressed > MAX_UNCOMPRESSED_SIZE) {
+      throw new Error("Decompression bomb detected: uncompressed size exceeds 500 MB");
+    }
+
     files.set(path, content);
   }
 
