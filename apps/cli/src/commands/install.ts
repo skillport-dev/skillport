@@ -51,10 +51,11 @@ export async function installCommand(
     // Try to resolve as marketplace skill ID (e.g. "author/skill@1.0.0" or UUID)
     console.log(chalk.dim(`Resolving from marketplace: ${target}`));
 
-    const { loadConfig } = await import("../utils/config.js");
+    const { loadConfig, checkAuthReady } = await import("../utils/config.js");
     const config = loadConfig();
-    if (!config.auth_token) {
-      console.log(chalk.red("Not logged in. Run 'skillport login' first."));
+    const authError = checkAuthReady(config);
+    if (authError) {
+      console.log(chalk.red(authError));
       process.exitCode = 1;
       return;
     }

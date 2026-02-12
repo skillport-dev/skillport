@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import chalk from "chalk";
 import inquirer from "inquirer";
-import { loadConfig, saveConfig } from "../utils/config.js";
+import { loadConfig, saveConfig, validateApiUrl } from "../utils/config.js";
 import { registerPublicKey } from "../utils/register-key.js";
 
 interface LoginOptions {
@@ -31,6 +31,14 @@ function listenOnPort(server: Server, port: number, host: string): Promise<numbe
 
 export async function loginCommand(options: LoginOptions): Promise<void> {
   const config = loadConfig();
+
+  // Validate API URL before proceeding
+  const urlError = validateApiUrl(config.marketplace_url);
+  if (urlError) {
+    console.error(chalk.red(`Error: ${urlError}`));
+    process.exitCode = 1;
+    return;
+  }
 
   console.log(chalk.bold("SkillPort Market Login"));
   console.log(chalk.dim(`Marketplace: ${config.marketplace_web_url}`));
@@ -76,6 +84,7 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
       token = answer.token;
     }
     config.auth_token = token;
+    config.auth_token_expires_at = new Date(Date.now() + 90 * 24 * 3600_000).toISOString();
     saveConfig(config);
 
     // Auto-register public key if available
@@ -184,15 +193,18 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
     });
 
     if (response.ok) {
-      const data = await response.json() as { token: string };
+      const data = await response.json() as { token: string; expires_at?: string };
       config.auth_token = data.token;
+      config.auth_token_expires_at = data.expires_at || new Date(Date.now() + 90 * 24 * 3600_000).toISOString();
     } else {
       // Use the access token directly as fallback
       config.auth_token = token;
+      config.auth_token_expires_at = new Date(Date.now() + 90 * 24 * 3600_000).toISOString();
     }
   } catch {
     // If API not available, use the token directly
     config.auth_token = token;
+    config.auth_token_expires_at = new Date(Date.now() + 90 * 24 * 3600_000).toISOString();
   }
 
   saveConfig(config);

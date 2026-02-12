@@ -3,14 +3,15 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import chalk from "chalk";
 import { extractSSP, verifyChecksums, verifySignature } from "@skillport/core";
-import { loadConfig, hasKeys } from "../utils/config.js";
+import { loadConfig, hasKeys, checkAuthReady } from "../utils/config.js";
 import { registerPublicKey } from "../utils/register-key.js";
 
 export async function publishCommand(sspPath: string): Promise<void> {
   const config = loadConfig();
 
-  if (!config.auth_token) {
-    console.log(chalk.red("Not logged in. Run 'skillport login' first."));
+  const authError = checkAuthReady(config);
+  if (authError) {
+    console.log(chalk.red(authError));
     process.exitCode = 1;
     return;
   }

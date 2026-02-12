@@ -1,5 +1,5 @@
 import chalk from "chalk";
-import { loadConfig } from "../utils/config.js";
+import { loadConfig, checkAuthReady } from "../utils/config.js";
 
 interface MarketplaceSkill {
   id: string;
@@ -31,8 +31,9 @@ const STATUS_LABELS: Record<string, string> = {
 export async function listCommand(opts: { json?: boolean }): Promise<void> {
   const config = loadConfig();
 
-  if (!config.auth_token) {
-    console.log(chalk.red("Not logged in. Run 'skillport login' first."));
+  const authError = checkAuthReady(config);
+  if (authError) {
+    console.log(chalk.red(authError));
     process.exitCode = 1;
     return;
   }

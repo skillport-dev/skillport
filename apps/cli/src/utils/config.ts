@@ -15,6 +15,7 @@ export interface SkillPortConfig {
   marketplace_url: string;
   marketplace_web_url: string;
   auth_token?: string;
+  auth_token_expires_at?: string;
   default_key_id?: string;
 }
 
@@ -75,7 +76,7 @@ export function loadConfig(): SkillPortConfig {
 
 export function saveConfig(config: SkillPortConfig): void {
   ensureConfigDirs();
-  writeFileSync(configPath(), JSON.stringify(config, null, 2));
+  writeFileSync(configPath(), JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 export function loadRegistry(): Registry {
@@ -113,4 +114,43 @@ export function loadPrivateKey(): string {
 
 export function loadPublicKey(): string {
   return readFileSync(join(keysDir(), "default.pub"), "utf-8");
+}
+
+/**
+ * Validate that the API URL uses HTTPS (except for localhost/127.0.0.1).
+ * Returns null if valid, or an error message if invalid.
+ */
+export function validateApiUrl(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+    if (parsed.protocol !== "https:" && !isLocal) {
+      return `Insecure API URL: ${url} — HTTPS is required for non-local hosts`;
+    }
+    return null;
+  } catch {
+    return `Invalid API URL: ${url}`;
+  }
+}
+
+/**
+ * Check if the stored auth token has expired.
+ */
+export function isTokenExpired(config: SkillPortConfig): boolean {
+  if (!config.auth_token_expires_at) return false;
+  return new Date(config.auth_token_expires_at).getTime() < Date.now();
+}
+
+/**
+ * Validate that the config is ready for authenticated API calls.
+ * Returns null if OK, or an error message describing the problem.
+ */
+export function checkAuthReady(config: SkillPortConfig): string | null {
+  if (!config.auth_token) {
+    return "Not logged in. Run 'skillport login' first.";
+  }
+  if (isTokenExpired(config)) {
+    return "Auth token has expired. Run 'skillport login' to re-authenticate.";
+  }
+  return validateApiUrl(config.marketplace_url);
 }

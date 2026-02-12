@@ -6,6 +6,7 @@ import {
   configPath,
   hasKeys,
   loadPublicKey,
+  isTokenExpired,
 } from "../utils/config.js";
 
 interface WhoamiResult {
@@ -60,7 +61,10 @@ export function whoamiCommand(opts: { json?: boolean }): void {
   console.log(`  ${chalk.bold("Config:")}        ${info.config_exists ? chalk.green(info.config_path) : chalk.yellow("not created yet")}`);
   console.log(`  ${chalk.bold("API:")}           ${info.marketplace_url}`);
   console.log(`  ${chalk.bold("Web:")}           ${info.marketplace_web_url}`);
-  console.log(`  ${chalk.bold("Authenticated:")} ${info.authenticated ? chalk.green("yes") : chalk.red("no")}`);
+  const config = loadConfig();
+  const expired = isTokenExpired(config);
+  const authLabel = !info.authenticated ? chalk.red("no") : expired ? chalk.red("expired") : chalk.green("yes");
+  console.log(`  ${chalk.bold("Authenticated:")} ${authLabel}`);
   console.log(`  ${chalk.bold("Signing keys:")}  ${info.keys_exist ? chalk.green("present") : chalk.red("not found")}`);
   if (info.local_key_id) {
     console.log(`  ${chalk.bold("Key ID:")}        ${info.local_key_id}`);
