@@ -54,6 +54,11 @@ export async function manageCommand(skillId: string, action: string, extraArgs?:
     }
 
     const cents = Math.round(dollars * 100);
+    if (cents > 0 && cents < 50) {
+      console.log(chalk.red("Minimum price for paid skills is $0.50 (50 cents)."));
+      process.exitCode = 1;
+      return;
+    }
     console.log(ACTION_DESC[act]);
 
     try {
