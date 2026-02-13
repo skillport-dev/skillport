@@ -1,7 +1,7 @@
 {
   "name": "@skillport/cli",
-  "version": "1.1.0",
-  "description": "SkillPort CLI — open-source secure skill distribution for OpenClaw. Export, scan, sign, and install AI skill packages.",
+  "version": "1.2.0",
+  "description": "SkillPort CLI — open-source secure skill distribution for OpenClaw & Claude Code. Export, scan, sign, convert, and install AI skill packages.",
   "type": "module",
   "license": "Apache-2.0",
   "repository": {
