@@ -1,0 +1,11 @@
+name: git-summary-reporter
+version: 1.0.0
+description: Summarize recent git commits
+
+defaults:
+  count: 10
+  format: markdown
+
+output:
+  type: markdown
+  template: summary.md
