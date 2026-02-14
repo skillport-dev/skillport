@@ -91,6 +91,32 @@ export const OpenClawMetaSchema = z.object({
   install_steps: z.array(z.string()).optional(),
 });
 
+// --- Agent-native fields (Phase 7C) ---
+
+export const SkillInputSchema = z.object({
+  name: z.string(),
+  type: z.enum(["string", "number", "boolean", "file", "secret"]),
+  description: z.string(),
+  required: z.boolean().default(true),
+  schema: z.record(z.unknown()).optional(),
+});
+
+export const SkillOutputSchema = z.object({
+  name: z.string(),
+  type: z.enum(["string", "file", "directory", "json"]),
+  description: z.string(),
+  schema: z.record(z.unknown()).optional(),
+});
+
+export const ScopeSchema = z.object({
+  files: z.boolean().default(false),
+  network: z.boolean().default(false),
+  processes: z.boolean().default(false),
+  env_vars: z.boolean().default(false),
+});
+
+export const DeclaredRiskEnum = z.enum(["low", "medium", "high"]);
+
 export const ManifestSchema = z.object({
   ssp_version: z.literal("1.0"),
   id: z
@@ -115,6 +141,20 @@ export const ManifestSchema = z.object({
   install: InstallSchema,
   hashes: z.record(z.string(), z.string()),
   created_at: z.string().datetime(),
+
+  // Agent-native: inputs/outputs for typed skill interface
+  inputs: z.array(SkillInputSchema).default([]),
+  outputs: z.array(SkillOutputSchema).default([]),
+
+  // Agent-native: scope declaration
+  scope: ScopeSchema.default({}),
+
+  // Agent-native: cost/time hints
+  estimated_duration_seconds: z.number().optional(),
+  estimated_tokens: z.number().optional(),
+
+  // Agent-native: author-declared risk level
+  declared_risk: DeclaredRiskEnum.default("medium"),
 });
 
 export type Manifest = z.infer<typeof ManifestSchema>;
@@ -135,3 +175,7 @@ export type RequiredInput = z.infer<typeof RequiredInputSchema>;
 export type Install = z.infer<typeof InstallSchema>;
 export type Author = z.infer<typeof AuthorSchema>;
 export type Severity = DangerFlag["severity"];
+export type SkillInput = z.infer<typeof SkillInputSchema>;
+export type SkillOutput = z.infer<typeof SkillOutputSchema>;
+export type Scope = z.infer<typeof ScopeSchema>;
+export type DeclaredRisk = z.infer<typeof DeclaredRiskEnum>;

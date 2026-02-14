@@ -10,6 +10,7 @@ import {
   extractSSP,
 } from "@skillport/core";
 import type { ConvertWarning, ConvertResult } from "@skillport/core";
+import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
 
 interface ConvertCommandOptions {
   to: string;
@@ -105,9 +106,10 @@ export async function convertCommand(
   // Validate --to
   const validTargets = ["openclaw", "claude-code", "universal"];
   if (!validTargets.includes(to)) {
-    console.log(chalk.red(`Invalid target platform: ${to}`));
-    console.log(chalk.dim(`Valid targets: ${validTargets.join(", ")}`));
-    process.exitCode = 1;
+    outputError("INPUT_INVALID", `Invalid target platform: ${to}`, {
+      exitCode: EXIT.INPUT_INVALID,
+      hints: [`Valid targets: ${validTargets.join(", ")}`],
+    });
     return;
   }
 
@@ -120,8 +122,9 @@ export async function convertCommand(
 
   try {
     if (!existsSync(resolvedSource)) {
-      console.log(chalk.red(`Source not found: ${source}`));
-      process.exitCode = 1;
+      outputError("FILE_NOT_FOUND", `Source not found: ${source}`, {
+        exitCode: EXIT.INPUT_INVALID,
+      });
       return;
     }
 
@@ -141,13 +144,15 @@ export async function convertCommand(
       skillMd = loaded.skillMd;
       files = loaded.files;
     } else {
-      console.log(chalk.red(`Unsupported file type: ${extname(resolvedSource)}`));
-      process.exitCode = 1;
+      outputError("INPUT_INVALID", `Unsupported file type: ${extname(resolvedSource)}`, {
+        exitCode: EXIT.INPUT_INVALID,
+      });
       return;
     }
   } catch (err) {
-    console.log(chalk.red(`Error loading source: ${(err as Error).message}`));
-    process.exitCode = 1;
+    outputError("LOAD_ERROR", `Error loading source: ${(err as Error).message}`, {
+      exitCode: EXIT.GENERAL,
+    });
     return;
   }
 
@@ -157,9 +162,11 @@ export async function convertCommand(
   }
 
   if (sourcePlatform === "unknown") {
-    if (yes) {
+    if (yes || isJsonMode()) {
       sourcePlatform = "openclaw"; // default in non-interactive
-      console.log(chalk.yellow(`Could not detect platform. Defaulting to OpenClaw.`));
+      if (!isJsonMode()) {
+        console.log(chalk.yellow(`Could not detect platform. Defaulting to OpenClaw.`));
+      }
     } else {
       const { platform } = await inquirer.prompt([
         {
@@ -176,12 +183,25 @@ export async function convertCommand(
     }
   }
 
-  console.log(chalk.dim(`Source platform: ${sourcePlatform}`));
-  console.log(chalk.dim(`Target platform: ${to}`));
+  if (!isJsonMode()) {
+    console.log(chalk.dim(`Source platform: ${sourcePlatform}`));
+    console.log(chalk.dim(`Target platform: ${to}`));
+  }
 
   // Check for same-platform conversion
   if (sourcePlatform === to) {
-    console.log(chalk.yellow(`Source is already ${to}. No conversion needed.`));
+    if (isJsonMode()) {
+      outputResult({
+        source_platform: sourcePlatform,
+        target: to,
+        output_path: null,
+        warnings: [],
+        skipped: true,
+        reason: "Source is already the target platform",
+      });
+    } else {
+      console.log(chalk.yellow(`Source is already ${to}. No conversion needed.`));
+    }
     return;
   }
 
@@ -197,16 +217,28 @@ export async function convertCommand(
     result = convertToUniversal(skillMd, files, convertOptions);
   }
 
-  // Display warnings
-  if (result.warnings.length > 0) {
-    console.log("");
-    console.log(chalk.bold("Conversion notes:"));
-    displayWarnings(result.warnings);
-    console.log("");
-  }
-
   // Dry-run: preview only
   if (dryRun) {
+    if (isJsonMode()) {
+      outputResult({
+        source_platform: sourcePlatform,
+        target: to,
+        output_path: null,
+        warnings: result.warnings,
+        dry_run: true,
+        skill_md_preview: result.skillMd,
+        files_count: result.files.size,
+      });
+      return;
+    }
+
+    if (result.warnings.length > 0) {
+      console.log("");
+      console.log(chalk.bold("Conversion notes:"));
+      displayWarnings(result.warnings);
+      console.log("");
+    }
+
     console.log(chalk.bold("─── Preview (--dry-run) ───"));
     console.log(result.skillMd);
     console.log(chalk.bold("─── End Preview ───"));
@@ -220,6 +252,24 @@ export async function convertCommand(
   const outPath = output || join(dirname(resolvedSource), `${basename(resolvedSource, extname(resolvedSource))}-${to}`);
 
   writeResult(result, outPath);
+
+  if (isJsonMode()) {
+    outputResult({
+      source_platform: sourcePlatform,
+      target: to,
+      output_path: outPath,
+      warnings: result.warnings,
+    });
+    return;
+  }
+
+  // Display warnings
+  if (result.warnings.length > 0) {
+    console.log("");
+    console.log(chalk.bold("Conversion notes:"));
+    displayWarnings(result.warnings);
+    console.log("");
+  }
 
   console.log(chalk.green(`Converted to ${to}:`));
   console.log(chalk.dim(`  Output: ${outPath}/`));

@@ -22,6 +22,7 @@ import {
   depsToManifest,
   type QualityReport,
 } from "../utils/quality-check.js";
+import { isJsonMode, outputResult, outputError, logProgress, EXIT } from "../utils/output.js";
 
 function collectAllFiles(
   dir: string,
@@ -242,21 +243,22 @@ export async function exportCommand(
   options: ExportOptions,
 ): Promise<void> {
   if (!hasKeys()) {
-    console.log(
-      chalk.red("No keys found. Run 'skillport init' first to generate keys."),
-    );
-    process.exitCode = 1;
+    outputError("KEY_MISSING", "No keys found. Run 'skillport init' first to generate keys.", {
+      exitCode: EXIT.GENERAL,
+      hints: ["Run 'skillport init' first"],
+    });
     return;
   }
 
   // Collect files
-  console.log(`Reading skill from: ${path}`);
+  logProgress(`Reading skill from: ${path}`);
   const allFiles = collectAllFiles(path);
 
   // Check for SKILL.md
   if (!allFiles.has("SKILL.md")) {
-    console.log(chalk.red("SKILL.md not found in the skill directory."));
-    process.exitCode = 1;
+    outputError("FILE_NOT_FOUND", "SKILL.md not found in the skill directory.", {
+      exitCode: EXIT.INPUT_INVALID,
+    });
     return;
   }
 
@@ -264,15 +266,17 @@ export async function exportCommand(
   const selectedFiles = options.yes ? allFiles : await selectContent(allFiles);
 
   // ─── Quality Check ───
-  console.log("\nRunning quality check...");
+  logProgress("\nRunning quality check...");
   const skillMdForCheck = selectedFiles.get("SKILL.md")!.toString("utf-8");
   const qualityReport = runQualityCheck(skillMdForCheck, selectedFiles);
 
-  displayQualityReport(qualityReport);
+  if (!isJsonMode()) {
+    displayQualityReport(qualityReport);
+  }
 
   if (!qualityReport.passed) {
     if (options.yes) {
-      console.log(chalk.yellow("Quality issues found. Continuing (--yes)."));
+      logProgress(chalk.yellow("Quality issues found. Continuing (--yes)."));
     } else {
       const { continueExport } = await inquirer.prompt([
         {
@@ -283,14 +287,14 @@ export async function exportCommand(
         },
       ]);
       if (!continueExport) {
-        console.log("Export cancelled. Fix the issues above and try again.");
+        logProgress("Export cancelled. Fix the issues above and try again.");
         return;
       }
     }
   }
 
   // Run security scan on selected files (fail-closed)
-  console.log("\nRunning security scan...");
+  logProgress("\nRunning security scan...");
   const textFiles = new Map<string, string>();
   for (const [p, content] of selectedFiles) {
     if (isScannable(p)) {
@@ -305,15 +309,14 @@ export async function exportCommand(
     scanResult.skippedFiles,
   );
 
-  displayScanReport(report);
+  if (!isJsonMode()) {
+    displayScanReport(report);
+  }
 
   if (!report.passed) {
-    console.log(
-      chalk.red(
-        "Export blocked: critical/high severity issues found. Fix them before exporting.",
-      ),
-    );
-    process.exitCode = 1;
+    outputError("SCAN_FAILED", "Export blocked: critical/high severity issues found. Fix them before exporting.", {
+      exitCode: EXIT.SECURITY_REJECTED,
+    });
     return;
   }
 
@@ -340,8 +343,10 @@ export async function exportCommand(
     if (!options.description) missing.push("--description");
     if (!options.author) missing.push("--author");
     if (missing.length > 0) {
-      console.log(chalk.red(`Missing required flags for --yes mode: ${missing.join(", ")}`));
-      process.exitCode = 1;
+      outputError("INPUT_INVALID", `Missing required flags for --yes mode: ${missing.join(", ")}`, {
+        exitCode: EXIT.INPUT_INVALID,
+        hints: missing.map(f => `Provide ${f}`),
+      });
       return;
     }
     answers = {
@@ -431,7 +436,7 @@ export async function exportCommand(
   };
 
   // Create SkillPort package with selected files only
-  console.log("Creating SkillPort package...");
+  logProgress("Creating SkillPort package...");
   const privateKey = loadPrivateKey();
   const sspBuffer = await createSSP({
     manifest,
@@ -441,6 +446,22 @@ export async function exportCommand(
 
   const outputPath = options.output || `${basename(path)}.ssp`;
   writeFileSync(outputPath, sspBuffer);
+
+  // JSON structured output for agent consumers
+  if (isJsonMode()) {
+    outputResult({
+      output_path: outputPath,
+      size_bytes: sspBuffer.length,
+      files_count: selectedFiles.size,
+      dependencies: detectedDeps.map(d => d.name),
+      quality_score: qualityReport.score,
+      scan_passed: report.passed,
+      risk_score: report.risk_score,
+      manifest_id: answers.id,
+      version: answers.version,
+    });
+    return;
+  }
 
   console.log(chalk.green(`\nSkillPort package created: ${outputPath}`));
   console.log(

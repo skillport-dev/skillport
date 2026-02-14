@@ -22,6 +22,7 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
   function run(cmd: string, extraEnv: Record<string, string> = {}, timeout = 30_000): string {
     return execSync(cmd, {
       encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
       env: {
         ...process.env,
         HOME: tempHome,
@@ -30,6 +31,27 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
       },
       timeout,
     });
+  }
+
+  /** Run command and return both stdout + stderr merged */
+  function runAll(cmd: string, extraEnv: Record<string, string> = {}, timeout = 30_000): string {
+    try {
+      const stdout = execSync(cmd, {
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          HOME: tempHome,
+          OPENCLAW_SKILLS_DIR: skillsDir,
+          ...extraEnv,
+        },
+        timeout,
+      });
+      return stdout;
+    } catch (e: unknown) {
+      const ex = e as { stdout?: string; stderr?: string };
+      return (ex.stdout || "") + (ex.stderr || "");
+    }
   }
 
   beforeAll(() => {
@@ -50,7 +72,7 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
   });
 
   it("export creates .ssp in non-interactive mode", () => {
-    const out = run(
+    const out = runAll(
       `${cli} export "${fixture}" -o "${sspPath}" --yes` +
       ` --id yu/sample-skill --name "Sample Skill"` +
       ` --description "A sample skill" --skill-version 1.0.0` +
@@ -90,14 +112,16 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     // Use a fresh HOME with no config/keys to test error
     const freshHome = mkdtempSync(join(tmpdir(), "skillport-keys-"));
     try {
-      const out = execSync(`${cli} keys register`, {
+      execSync(`${cli} keys register`, {
         encoding: "utf-8",
         env: { ...process.env, HOME: freshHome },
       });
-      expect(out).toContain("Not logged in");
+      // Should have thrown due to non-zero exit
+      expect.unreachable("Should have exited with non-zero code");
     } catch (e: unknown) {
-      // Commander exits with code 1, which throws
-      const msg = (e as { stdout?: string }).stdout || (e as Error).message || "";
+      // outputError sends to stderr, execSync includes stderr in error.message
+      const ex = e as { stdout?: string; stderr?: string; message?: string };
+      const msg = (ex.stderr || "") + (ex.stdout || "") + (ex.message || "");
       expect(msg).toContain("Not logged in");
     } finally {
       rmSync(freshHome, { recursive: true, force: true });
@@ -164,9 +188,13 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     expect(out).toContain("Signing keys:");
   });
 
-  it("whoami --json returns valid JSON", () => {
+  it("whoami --json returns valid JSON with envelope", () => {
     const out = run(`${cli} whoami --json`);
-    const data = JSON.parse(out);
+    const envelope = JSON.parse(out);
+    expect(envelope).toHaveProperty("schema_version", 1);
+    expect(envelope).toHaveProperty("ok", true);
+    expect(envelope).toHaveProperty("data");
+    const data = envelope.data;
     expect(data).toHaveProperty("config_path");
     expect(data).toHaveProperty("authenticated");
     expect(data).toHaveProperty("keys_exist");
@@ -177,7 +205,10 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
 
   it("doctor checks setup health", () => {
     const out = run(`${cli} doctor --json`, {}, 15_000);
-    const data = JSON.parse(out);
+    const envelope = JSON.parse(out);
+    expect(envelope).toHaveProperty("schema_version", 1);
+    expect(envelope).toHaveProperty("ok", true);
+    const data = envelope.data;
     expect(data).toHaveProperty("checks");
     expect(data).toHaveProperty("ok");
     expect(Array.isArray(data.checks)).toBe(true);
@@ -189,7 +220,7 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
   }, 20_000);
 
   it("install succeeds in non-interactive mode", () => {
-    const out = run(`${cli} install "${sspPath}" --yes`);
+    const out = runAll(`${cli} install "${sspPath}" --yes`);
     expect(out).toContain("Installed: Sample Skill v1.0.0");
 
     // Verify files were extracted
@@ -201,5 +232,47 @@ describe("CLI E2E: export → verify → dry-run → install", () => {
     const manifest = JSON.parse(readFileSync(join(installDir, "manifest.json"), "utf-8"));
     expect(manifest.id).toBe("yu/sample-skill");
     expect(manifest.version).toBe("1.0.0");
+  });
+
+  it("install is idempotent (skips if same version installed)", () => {
+    // Re-install the same version — should skip
+    const out = runAll(`${cli} install "${sspPath}" --yes`);
+    expect(out).toContain("Already installed");
+  });
+
+  it("install --force reinstalls same version", () => {
+    const out = runAll(`${cli} install "${sspPath}" --yes --force`);
+    expect(out).toContain("Installed: Sample Skill v1.0.0");
+  });
+
+  it("plan outputs structured preview", () => {
+    const out = run(`${cli} plan "${sspPath}" --json`);
+    const envelope = JSON.parse(out);
+    expect(envelope).toHaveProperty("schema_version", 1);
+    expect(envelope).toHaveProperty("ok", true);
+    const data = envelope.data;
+    expect(data.skill_id).toBe("yu/sample-skill");
+    expect(data.version).toBe("1.0.0");
+    expect(data.action).toBe("reinstall");
+    expect(data.security).toHaveProperty("scan_passed");
+    expect(data.security).toHaveProperty("risk_score");
+    expect(data.environment).toHaveProperty("os_compatible", true);
+    expect(data.rollback).toHaveProperty("command");
+  });
+
+  it("export --json outputs structured result", () => {
+    const jsonSspPath = join(tempHome, "json-output.ssp");
+    const out = run(
+      `${cli} export "${join(cliDir, "test-fixtures", "sample-skill")}" -o "${jsonSspPath}" --yes --json` +
+      ` --id yu/json-test --name "JSON Test"` +
+      ` --description "Test" --skill-version 1.0.0` +
+      ` --author Yu --os macos`,
+    );
+    const envelope = JSON.parse(out);
+    expect(envelope).toHaveProperty("schema_version", 1);
+    expect(envelope).toHaveProperty("ok", true);
+    expect(envelope.data).toHaveProperty("output_path");
+    expect(envelope.data).toHaveProperty("size_bytes");
+    expect(envelope.data).toHaveProperty("manifest_id", "yu/json-test");
   });
 });

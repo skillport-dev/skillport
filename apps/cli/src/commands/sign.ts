@@ -2,15 +2,18 @@ import { readFileSync, writeFileSync } from "node:fs";
 import chalk from "chalk";
 import { extractSSP, createSSP } from "@skillport/core";
 import { hasKeys, loadPrivateKey } from "../utils/config.js";
+import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
 
 export async function signCommand(sspPath: string): Promise<void> {
   if (!hasKeys()) {
-    console.log(chalk.red("No keys found. Run 'skillport init' first."));
-    process.exitCode = 1;
+    outputError("KEY_MISSING", "No keys found. Run 'skillport init' first.", {
+      exitCode: EXIT.GENERAL,
+      hints: ["Run 'skillport init' first"],
+    });
     return;
   }
 
-  console.log(`Signing: ${sspPath}`);
+  if (!isJsonMode()) console.log(`Signing: ${sspPath}`);
   const data = readFileSync(sspPath);
   const extracted = await extractSSP(data);
 
@@ -36,5 +39,11 @@ export async function signCommand(sspPath: string): Promise<void> {
   });
 
   writeFileSync(sspPath, sspBuffer);
+
+  if (isJsonMode()) {
+    outputResult({ path: sspPath, signed: true });
+    return;
+  }
+
   console.log(chalk.green(`Package re-signed successfully: ${sspPath}`));
 }

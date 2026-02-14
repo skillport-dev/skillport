@@ -1,5 +1,8 @@
 import chalk from "chalk";
 import { loadConfig } from "../utils/config.js";
+import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
+import { checkPolicy } from "../utils/policy.js";
+import { logProvenance, detectAgent } from "../utils/provenance.js";
 
 type Action = "publish" | "unpublish" | "delete" | "set-price";
 
@@ -21,17 +24,32 @@ export async function manageCommand(skillId: string, action: string, extraArgs?:
   const validActions: Action[] = ["publish", "unpublish", "delete", "set-price"];
 
   if (!validActions.includes(action as Action)) {
-    console.log(chalk.red(`Invalid action: ${action}`));
-    console.log(`Valid actions: ${validActions.join(", ")}`);
-    process.exitCode = 1;
+    outputError("INPUT_INVALID", `Invalid action: ${action}`, {
+      exitCode: EXIT.INPUT_INVALID,
+      hints: [`Valid actions: ${validActions.join(", ")}`],
+    });
+    return;
+  }
+
+  // Policy check — "manage:delete", "manage:unpublish", etc.
+  const policyAction = `manage:${action}`;
+  const nonInteractive = isJsonMode();
+  const policyResult = checkPolicy(policyAction, { nonInteractive });
+  if (!policyResult.allowed) {
+    outputError("POLICY_REJECTED", policyResult.reason!, {
+      exitCode: EXIT.POLICY_REJECTED,
+      hints: policyResult.hints,
+    });
     return;
   }
 
   const config = loadConfig();
 
   if (!config.auth_token) {
-    console.log(chalk.red("Not logged in. Run 'skillport login' first."));
-    process.exitCode = 1;
+    outputError("AUTH_REQUIRED", "Not logged in. Run 'skillport login' first.", {
+      exitCode: EXIT.AUTH_REQUIRED,
+      hints: ["Run 'skillport login'"],
+    });
     return;
   }
 
@@ -40,26 +58,29 @@ export async function manageCommand(skillId: string, action: string, extraArgs?:
   if (act === "set-price") {
     const priceArg = extraArgs?.[0];
     if (priceArg === undefined || priceArg === "") {
-      console.log(chalk.red("Missing price. Usage: skillport manage <skill-id> set-price <dollars>"));
-      console.log(chalk.dim("  Example: skillport manage abc123 set-price 9.99"));
-      process.exitCode = 1;
+      outputError("INPUT_INVALID", "Missing price. Usage: skillport manage <skill-id> set-price <dollars>", {
+        exitCode: EXIT.INPUT_INVALID,
+        hints: ["Example: skillport manage abc123 set-price 9.99"],
+      });
       return;
     }
 
     const dollars = parseFloat(priceArg);
     if (isNaN(dollars) || dollars < 0) {
-      console.log(chalk.red("Price must be a non-negative number (in dollars)."));
-      process.exitCode = 1;
+      outputError("INPUT_INVALID", "Price must be a non-negative number (in dollars).", {
+        exitCode: EXIT.INPUT_INVALID,
+      });
       return;
     }
 
     const cents = Math.round(dollars * 100);
     if (cents > 0 && cents < 50) {
-      console.log(chalk.red("Minimum price for paid skills is $0.50 (50 cents)."));
-      process.exitCode = 1;
+      outputError("INPUT_INVALID", "Minimum price for paid skills is $0.50 (50 cents).", {
+        exitCode: EXIT.INPUT_INVALID,
+      });
       return;
     }
-    console.log(ACTION_DESC[act]);
+    if (!isJsonMode()) console.log(ACTION_DESC[act]);
 
     try {
       const res = await fetch(`${config.marketplace_url}/v1/skills/${skillId}`, {
@@ -76,19 +97,36 @@ export async function manageCommand(skillId: string, action: string, extraArgs?:
         const msg = String(body.error || res.statusText);
 
         if (res.status === 403) {
-          console.log(chalk.red("Permission denied. You are not the author of this skill."));
+          outputError("FORBIDDEN", "Permission denied. You are not the author of this skill.", {
+            exitCode: EXIT.AUTH_REQUIRED,
+          });
         } else if (res.status === 404) {
-          console.log(chalk.red(`Server does not support price updates (PATCH /v1/skills/:id returned 404).`));
-          console.log(chalk.dim("Are you on an old API deployment? Try updating the server."));
+          outputError("NOT_FOUND", "Server does not support price updates (PATCH /v1/skills/:id returned 404).", {
+            exitCode: EXIT.GENERAL,
+            hints: ["Are you on an old API deployment? Try updating the server."],
+          });
         } else {
-          console.log(chalk.red(`Failed: ${msg}`));
+          outputError("API_ERROR", `Failed: ${msg}`, {
+            exitCode: EXIT.NETWORK,
+            retryable: true,
+          });
         }
-
-        process.exitCode = 1;
         return;
       }
 
       const result = await res.json() as { id: string; price: number; status: string };
+
+      logProvenance({
+        action: `manage:${act}`,
+        agent: detectAgent(),
+        skill_id: skillId,
+        policy_allowed: true,
+      });
+
+      if (isJsonMode()) {
+        outputResult({ id: result.id, action: act, result: { price: result.price, status: result.status } });
+        return;
+      }
 
       console.log(chalk.green(ACTION_SUCCESS[act]));
       console.log();
@@ -96,13 +134,15 @@ export async function manageCommand(skillId: string, action: string, extraArgs?:
       console.log(`  ${chalk.bold("Price:")}     ${result.price === 0 ? "Free" : `$${(result.price / 100).toFixed(2)}`}`);
       console.log(`  ${chalk.bold("Status:")}    ${result.status}`);
     } catch (error) {
-      console.log(chalk.red(`Failed: ${(error as Error).message}`));
-      process.exitCode = 1;
+      outputError("NETWORK_ERROR", `Failed: ${(error as Error).message}`, {
+        exitCode: EXIT.NETWORK,
+        retryable: true,
+      });
     }
     return;
   }
 
-  console.log(ACTION_DESC[act]);
+  if (!isJsonMode()) console.log(ACTION_DESC[act]);
 
   try {
     let res: Response;
@@ -124,18 +164,35 @@ export async function manageCommand(skillId: string, action: string, extraArgs?:
       const msg = String(body.error || res.statusText);
 
       if (res.status === 403) {
-        console.log(chalk.red("Permission denied. You are not the author of this skill."));
+        outputError("FORBIDDEN", "Permission denied. You are not the author of this skill.", {
+          exitCode: EXIT.AUTH_REQUIRED,
+        });
       } else if (res.status === 404) {
-        console.log(chalk.red(`Skill not found: ${skillId}`));
+        outputError("NOT_FOUND", `Skill not found: ${skillId}`, {
+          exitCode: EXIT.GENERAL,
+        });
       } else {
-        console.log(chalk.red(`Failed: ${msg}`));
+        outputError("API_ERROR", `Failed: ${msg}`, {
+          exitCode: EXIT.NETWORK,
+          retryable: true,
+        });
       }
-
-      process.exitCode = 1;
       return;
     }
 
     const result = await res.json() as { id: string; status: string };
+
+    logProvenance({
+      action: `manage:${act}`,
+      agent: detectAgent(),
+      skill_id: skillId,
+      policy_allowed: true,
+    });
+
+    if (isJsonMode()) {
+      outputResult({ id: result.id, action: act, result: { status: result.status } });
+      return;
+    }
 
     console.log(chalk.green(ACTION_SUCCESS[act]));
     console.log();
@@ -147,7 +204,9 @@ export async function manageCommand(skillId: string, action: string, extraArgs?:
       console.log(chalk.dim(`  URL: ${config.marketplace_web_url}/skills/${result.id}`));
     }
   } catch (error) {
-    console.log(chalk.red(`Failed: ${(error as Error).message}`));
-    process.exitCode = 1;
+    outputError("NETWORK_ERROR", `Failed: ${(error as Error).message}`, {
+      exitCode: EXIT.NETWORK,
+      retryable: true,
+    });
   }
 }

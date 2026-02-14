@@ -159,6 +159,38 @@ export interface UpdateReportRequest {
   admin_notes?: string;
 }
 
+// ---- Feedback ----
+export interface CreateFeedbackRequest {
+  status: "success" | "failure" | "error";
+  trace_id?: string;
+  comment?: string;
+  duration_ms?: number;
+  tokens_used?: number;
+}
+
+export interface FeedbackSummary {
+  skill_id: string;
+  total_feedback: number;
+  success_count: number;
+  failure_count: number;
+  error_count: number;
+  success_rate: number;
+  avg_duration_ms: number | null;
+  avg_tokens_used: number | null;
+}
+
+export interface FeedbackEntry {
+  id: string;
+  skill_id: string;
+  user_id: string;
+  status: "success" | "failure" | "error";
+  trace_id: string | null;
+  comment: string;
+  duration_ms: number | null;
+  tokens_used: number | null;
+  created_at: string;
+}
+
 // ---- Error ----
 export interface APIError {
   error: string;

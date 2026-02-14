@@ -3,16 +3,23 @@ import { join } from "node:path";
 import chalk from "chalk";
 import { generateKeyPair } from "@skillport/core";
 import { ensureConfigDirs, keysDir, hasKeys, saveConfig, loadConfig } from "../utils/config.js";
+import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
 
 export async function initCommand(): Promise<void> {
   if (hasKeys()) {
-    console.log(chalk.yellow("Keys already exist."));
+    if (isJsonMode()) {
+      outputError("ALREADY_EXISTS", "Keys already exist.", { exitCode: EXIT.GENERAL });
+    } else {
+      console.log(chalk.yellow("Keys already exist."));
+    }
     return;
   }
 
   ensureConfigDirs();
 
-  console.log("Generating Ed25519 key pair...");
+  if (!isJsonMode()) {
+    console.log("Generating Ed25519 key pair...");
+  }
   const keyPair = generateKeyPair();
 
   const dir = keysDir();
@@ -23,6 +30,14 @@ export async function initCommand(): Promise<void> {
   const config = loadConfig();
   config.default_key_id = keyPair.keyId;
   saveConfig(config);
+
+  if (isJsonMode()) {
+    outputResult({
+      key_id: keyPair.keyId,
+      public_key_path: join(dir, "default.pub"),
+    });
+    return;
+  }
 
   console.log(chalk.green("Key pair generated successfully!"));
   console.log(`  Key ID: ${chalk.bold(keyPair.keyId)}`);

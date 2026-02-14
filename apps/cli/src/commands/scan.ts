@@ -9,6 +9,7 @@ import {
   MAX_FILE_SIZE,
 } from "@skillport/scanner";
 import { displayScanReport } from "../utils/display.js";
+import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
 
 function collectFiles(
   dir: string,
@@ -43,7 +44,7 @@ export async function scanCommand(target: string): Promise<void> {
 
   if (target.endsWith(".ssp")) {
     // Scan SSP package
-    console.log(`Scanning SkillPort package: ${target}`);
+    if (!isJsonMode()) console.log(`Scanning SkillPort package: ${target}`);
     const data = readFileSync(target);
     const ssp = await extractSSP(data);
 
@@ -58,7 +59,7 @@ export async function scanCommand(target: string): Promise<void> {
     }
   } else {
     // Scan directory
-    console.log(`Scanning directory: ${target}`);
+    if (!isJsonMode()) console.log(`Scanning directory: ${target}`);
     files = collectFiles(target);
   }
 
@@ -68,6 +69,19 @@ export async function scanCommand(target: string): Promise<void> {
     result.scannedFiles,
     result.skippedFiles,
   );
+
+  if (isJsonMode()) {
+    outputResult({
+      passed: report.passed,
+      risk_score: report.risk_score,
+      summary: report.summary,
+      issues: report.issues,
+      scanned_files: report.scannedFiles,
+      skipped_files: report.skippedFiles,
+    });
+    if (!report.passed) process.exitCode = EXIT.SECURITY_REJECTED;
+    return;
+  }
 
   displayScanReport(report);
 

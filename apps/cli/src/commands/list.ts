@@ -1,5 +1,6 @@
 import chalk from "chalk";
 import { loadConfig, checkAuthReady } from "../utils/config.js";
+import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
 
 interface MarketplaceSkill {
   id: string;
@@ -33,8 +34,10 @@ export async function listCommand(opts: { json?: boolean }): Promise<void> {
 
   const authError = checkAuthReady(config);
   if (authError) {
-    console.log(chalk.red(authError));
-    process.exitCode = 1;
+    outputError("AUTH_REQUIRED", authError, {
+      exitCode: EXIT.AUTH_REQUIRED,
+      hints: ["Run 'skillport login' to authenticate."],
+    });
     return;
   }
 
@@ -45,15 +48,17 @@ export async function listCommand(opts: { json?: boolean }): Promise<void> {
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-      console.log(chalk.red(`Failed to fetch skills: ${body.error || res.statusText}`));
-      process.exitCode = 1;
+      outputError("NETWORK_ERROR", `Failed to fetch skills: ${body.error || res.statusText}`, {
+        exitCode: EXIT.NETWORK,
+        retryable: true,
+      });
       return;
     }
 
     const skills: MarketplaceSkill[] = await res.json();
 
-    if (opts.json) {
-      console.log(JSON.stringify(skills, null, 2));
+    if (isJsonMode()) {
+      outputResult({ skills });
       return;
     }
 
@@ -104,7 +109,9 @@ export async function listCommand(opts: { json?: boolean }): Promise<void> {
     console.log();
     console.log(chalk.dim("  Manage: skillport manage <skill-id> publish|unpublish|delete"));
   } catch (error) {
-    console.log(chalk.red(`Failed to fetch skills: ${(error as Error).message}`));
-    process.exitCode = 1;
+    outputError("NETWORK_ERROR", `Failed to fetch skills: ${(error as Error).message}`, {
+      exitCode: EXIT.NETWORK,
+      retryable: true,
+    });
   }
 }

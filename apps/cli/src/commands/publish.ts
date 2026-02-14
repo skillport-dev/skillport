@@ -5,33 +5,52 @@ import chalk from "chalk";
 import { extractSSP, verifyChecksums, verifySignature } from "@skillport/core";
 import { loadConfig, hasKeys, checkAuthReady } from "../utils/config.js";
 import { registerPublicKey } from "../utils/register-key.js";
+import { isJsonMode, outputResult, outputError, logProgress, EXIT } from "../utils/output.js";
+import { checkPolicy } from "../utils/policy.js";
+import { logProvenance, detectAgent } from "../utils/provenance.js";
 
 export async function publishCommand(sspPath: string): Promise<void> {
   const config = loadConfig();
 
   const authError = checkAuthReady(config);
   if (authError) {
-    console.log(chalk.red(authError));
-    process.exitCode = 1;
+    outputError("AUTH_REQUIRED", authError, {
+      exitCode: EXIT.AUTH_REQUIRED,
+      hints: ["Run 'skillport login' to authenticate."],
+    });
+    return;
+  }
+
+  // Policy check
+  const nonInteractive = isJsonMode();
+  const policyResult = checkPolicy("publish", { nonInteractive });
+  if (!policyResult.allowed) {
+    outputError("POLICY_REJECTED", policyResult.reason!, {
+      exitCode: EXIT.POLICY_REJECTED,
+      hints: policyResult.hints,
+    });
     return;
   }
 
   // Validate SSP before upload
-  console.log(`Validating: ${sspPath}`);
+  logProgress(`Validating: ${sspPath}`);
   const data = readFileSync(sspPath);
   const extracted = await extractSSP(data);
 
   // Verify checksums
   const { valid } = verifyChecksums(extracted.files, extracted.checksums);
   if (!valid) {
-    console.log(chalk.red("Checksum verification failed. Cannot publish."));
-    process.exitCode = 1;
+    outputError("CHECKSUM_MISMATCH", "Checksum verification failed. Cannot publish.", {
+      exitCode: EXIT.SECURITY_REJECTED,
+    });
     return;
   }
 
   if (!extracted.authorSignature) {
-    console.log(chalk.red("No author signature. Sign the package first."));
-    process.exitCode = 1;
+    outputError("SIGNATURE_MISSING", "No author signature. Sign the package first.", {
+      exitCode: EXIT.SECURITY_REJECTED,
+      hints: ["Run 'skillport sign <ssp>' first"],
+    });
     return;
   }
 
@@ -46,19 +65,19 @@ export async function publishCommand(sspPath: string): Promise<void> {
       pubKeyPem,
     );
     if (!sigValid) {
-      console.log(chalk.red("Signature verification failed. Package may have been tampered with after signing."));
-      console.log(chalk.dim(`  Key ID: ${keyId}`));
-      process.exitCode = 1;
+      outputError("SIGNATURE_INVALID", "Signature verification failed. Package may have been tampered with after signing.", {
+        exitCode: EXIT.SECURITY_REJECTED,
+        hints: [`Key ID: ${keyId}`],
+      });
       return;
     }
-    console.log(chalk.green("✓ Signature verified"));
+    logProgress(chalk.green("✓ Signature verified"));
   } else {
-    console.log(chalk.yellow("⚠ Local public key not found — skipping local signature check"));
-    console.log(chalk.dim("  Server will verify signature against registered key."));
+    logProgress(chalk.yellow("⚠ Local public key not found — skipping local signature check"));
   }
 
   // Upload to marketplace
-  console.log("Uploading to marketplace...");
+  logProgress("Uploading to marketplace...");
 
   async function upload(): Promise<Response> {
     const formData = new FormData();
@@ -79,22 +98,26 @@ export async function publishCommand(sspPath: string): Promise<void> {
       const errorMsg = String(errorBody.error || "");
 
       if (errorMsg.includes("Signing key is not registered") && hasKeys()) {
-        console.log(chalk.yellow("Signing key not registered. Registering automatically..."));
+        logProgress(chalk.yellow("Signing key not registered. Registering automatically..."));
         const registered = await registerPublicKey(config);
         if (registered) {
-          console.log("Retrying upload...");
+          logProgress("Retrying upload...");
           response = await upload();
         } else {
-          console.log(chalk.red("Could not register key. Run 'skillport keys register' manually."));
-          process.exitCode = 1;
+          outputError("KEY_NOT_REGISTERED", "Could not register key. Run 'skillport keys register' manually.", {
+            exitCode: EXIT.GENERAL,
+            hints: ["Run 'skillport keys register'"],
+          });
           return;
         }
       }
 
       if (!response.ok) {
         const retryBody = await response.json().catch(() => ({})) as Record<string, unknown>;
-        console.log(chalk.red(`Upload failed: ${retryBody.error || response.statusText}`));
-        process.exitCode = 1;
+        outputError("UPLOAD_FAILED", `Upload failed: ${retryBody.error || response.statusText}`, {
+          exitCode: EXIT.NETWORK,
+          retryable: true,
+        });
         return;
       }
     }
@@ -108,6 +131,28 @@ export async function publishCommand(sspPath: string): Promise<void> {
       risk_score: number;
       status?: string;
     };
+
+    logProvenance({
+      action: "publish",
+      agent: detectAgent(),
+      skill_id: result.ssp_id,
+      version: result.version,
+      risk_score: result.risk_score,
+      scan_passed: result.scan_passed,
+      policy_allowed: true,
+    });
+
+    if (isJsonMode()) {
+      outputResult({
+        id: result.id,
+        ssp_id: result.ssp_id,
+        version: result.version,
+        status: result.status || "draft",
+        scan_passed: result.scan_passed,
+        risk_score: result.risk_score,
+      });
+      return;
+    }
 
     if (result.status === "published") {
       console.log(chalk.green("Version updated successfully!"));
@@ -129,7 +174,9 @@ export async function publishCommand(sspPath: string): Promise<void> {
       console.log(chalk.dim(`  Go to Dashboard to publish: ${config.marketplace_web_url}/dashboard`));
     }
   } catch (error) {
-    console.log(chalk.red(`Upload failed: ${(error as Error).message}`));
-    process.exitCode = 1;
+    outputError("UPLOAD_FAILED", `Upload failed: ${(error as Error).message}`, {
+      exitCode: EXIT.NETWORK,
+      retryable: true,
+    });
   }
 }

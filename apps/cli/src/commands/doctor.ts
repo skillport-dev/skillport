@@ -7,6 +7,7 @@ import {
   hasKeys,
   loadPublicKey,
 } from "../utils/config.js";
+import { isJsonMode, outputResult } from "../utils/output.js";
 
 interface Check {
   name: string;
@@ -151,15 +152,15 @@ async function runChecks(): Promise<DoctorResult> {
 }
 
 export async function doctorCommand(opts: { json?: boolean }): Promise<void> {
-  if (!opts.json) {
+  if (!isJsonMode()) {
     console.log(chalk.bold("SkillPort Doctor"));
     console.log();
   }
 
   const result = await runChecks();
 
-  if (opts.json) {
-    console.log(JSON.stringify(result, null, 2));
+  if (isJsonMode()) {
+    outputResult(result as unknown as Record<string, unknown>);
   } else {
     for (const check of result.checks) {
       const icon =

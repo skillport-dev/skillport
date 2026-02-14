@@ -1,8 +1,9 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { platform } from "node:os";
 import chalk from "chalk";
 import { extractSSP, verifyChecksums } from "@skillport/core";
 import { scanFiles, generateReport, isScannable } from "@skillport/scanner";
+import { isJsonMode, outputResult, EXIT } from "../utils/output.js";
 
 interface DiagnosticResult {
   check: string;
@@ -11,8 +12,10 @@ interface DiagnosticResult {
 }
 
 export async function dryRunCommand(sspPath: string): Promise<void> {
-  console.log(`Dry-run diagnostics for: ${sspPath}`);
-  console.log();
+  if (!isJsonMode()) {
+    console.log(`Dry-run diagnostics for: ${sspPath}`);
+    console.log();
+  }
 
   const data = readFileSync(sspPath);
   const extracted = await extractSSP(data);
@@ -99,6 +102,19 @@ export async function dryRunCommand(sspPath: string): Promise<void> {
     detail: `Risk: ${report.risk_score}/100, Issues: ${report.summary.total}`,
   });
 
+  const hasFail = diagnostics.some((d) => d.status === "fail");
+
+  if (isJsonMode()) {
+    if (hasFail) process.exitCode = EXIT.SECURITY_REJECTED;
+    outputResult({
+      diagnostics,
+      passed: !hasFail,
+      manifest_id: manifest.id,
+      version: manifest.version,
+    });
+    return;
+  }
+
   // Display diagnostics table
   console.log(chalk.bold("Diagnostic Results:"));
   console.log(chalk.dim("─".repeat(60)));
@@ -127,7 +143,6 @@ export async function dryRunCommand(sspPath: string): Promise<void> {
 
   console.log(chalk.dim("─".repeat(60)));
 
-  const hasFail = diagnostics.some((d) => d.status === "fail");
   if (hasFail) {
     console.log(chalk.red.bold("\nDry-run: ISSUES FOUND"));
     process.exitCode = 1;

@@ -1,64 +1,78 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { EXIT } from "../utils/output.js";
 
 // Mock config before importing
 const mockConfig = {
   marketplace_url: "http://localhost:3001",
   marketplace_web_url: "http://localhost:3000",
-  auth_token: "test-token",
+  auth_token: "test-token" as string | undefined,
 };
 vi.mock("../utils/config.js", () => ({
   loadConfig: () => mockConfig,
+}));
+
+vi.mock("../utils/policy.js", () => ({
+  checkPolicy: () => ({ allowed: true }),
+}));
+
+vi.mock("../utils/provenance.js", () => ({
+  logProvenance: vi.fn(),
+  detectAgent: () => "human",
 }));
 
 import { manageCommand } from "../commands/manage.js";
 
 describe("manage command", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   const originalFetch = globalThis.fetch;
+  let savedAuthToken: string | undefined;
 
   beforeEach(() => {
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    savedAuthToken = mockConfig.auth_token;
     process.exitCode = undefined;
   });
 
   afterEach(() => {
     consoleSpy.mockRestore();
+    consoleErrorSpy.mockRestore();
     globalThis.fetch = originalFetch;
+    mockConfig.auth_token = savedAuthToken;
     process.exitCode = undefined;
   });
 
   it("rejects invalid action", async () => {
     await manageCommand("s1", "invalid");
-    expect(process.exitCode).toBe(1);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Invalid action"));
+    expect(process.exitCode).toBe(EXIT.INPUT_INVALID);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Invalid action"));
   });
 
   it("rejects when not logged in", async () => {
-    const orig = mockConfig.auth_token;
-    mockConfig.auth_token = undefined as unknown as string;
+    mockConfig.auth_token = undefined;
     await manageCommand("s1", "publish");
-    expect(process.exitCode).toBe(1);
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Not logged in"));
-    mockConfig.auth_token = orig;
+    expect(process.exitCode).toBe(EXIT.AUTH_REQUIRED);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Not logged in"));
   });
 
   describe("set-price", () => {
     it("rejects missing price argument", async () => {
       await manageCommand("s1", "set-price", []);
-      expect(process.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Missing price"));
+      expect(process.exitCode).toBe(EXIT.INPUT_INVALID);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Missing price"));
     });
 
     it("rejects negative price", async () => {
       await manageCommand("s1", "set-price", ["-5"]);
-      expect(process.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("non-negative"));
+      expect(process.exitCode).toBe(EXIT.INPUT_INVALID);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("non-negative"));
     });
 
     it("rejects non-numeric price", async () => {
       await manageCommand("s1", "set-price", ["abc"]);
-      expect(process.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("non-negative"));
+      expect(process.exitCode).toBe(EXIT.INPUT_INVALID);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("non-negative"));
     });
 
     it("sends PATCH with correct cents value", async () => {
@@ -102,8 +116,8 @@ describe("manage command", () => {
       })) as unknown as typeof fetch;
 
       await manageCommand("s1", "set-price", ["5"]);
-      expect(process.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Permission denied"));
+      expect(process.exitCode).toBe(EXIT.AUTH_REQUIRED);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("Permission denied"));
     });
 
     it("handles 404 from API with helpful message", async () => {
@@ -114,8 +128,8 @@ describe("manage command", () => {
       })) as unknown as typeof fetch;
 
       await manageCommand("s1", "set-price", ["5"]);
-      expect(process.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("does not support price updates"));
+      expect(process.exitCode).toBe(EXIT.GENERAL);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("does not support price updates"));
     });
 
     it("handles 400 BAD_STATUS from API", async () => {
@@ -126,8 +140,8 @@ describe("manage command", () => {
       })) as unknown as typeof fetch;
 
       await manageCommand("s1", "set-price", ["5"]);
-      expect(process.exitCode).toBe(1);
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("draft"));
+      expect(process.exitCode).toBe(EXIT.NETWORK);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining("draft"));
     });
   });
 

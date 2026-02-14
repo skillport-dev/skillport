@@ -5,6 +5,7 @@ import chalk from "chalk";
 import inquirer from "inquirer";
 import { loadConfig, saveConfig, validateApiUrl } from "../utils/config.js";
 import { registerPublicKey } from "../utils/register-key.js";
+import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
 
 interface LoginOptions {
   method: string;
@@ -35,14 +36,17 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
   // Validate API URL before proceeding
   const urlError = validateApiUrl(config.marketplace_url);
   if (urlError) {
-    console.error(chalk.red(`Error: ${urlError}`));
-    process.exitCode = 1;
+    outputError("INPUT_INVALID", urlError, {
+      exitCode: EXIT.INPUT_INVALID,
+    });
     return;
   }
 
-  console.log(chalk.bold("SkillPort Market Login"));
-  console.log(chalk.dim(`Marketplace: ${config.marketplace_web_url}`));
-  console.log();
+  if (!isJsonMode()) {
+    console.log(chalk.bold("SkillPort Market Login"));
+    console.log(chalk.dim(`Marketplace: ${config.marketplace_web_url}`));
+    console.log();
+  }
 
   let method = options.method;
 
@@ -52,7 +56,7 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
   }
 
   // Interactive prompt only when no flags given
-  if (!options.yes && method === "browser" && !options.token) {
+  if (!options.yes && !isJsonMode() && method === "browser" && !options.token) {
     const answer = await inquirer.prompt([
       {
         type: "list",
@@ -69,10 +73,11 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
   if (method === "token") {
     let token = options.token;
-    if (!token && options.yes) {
-      console.error(chalk.red("Error: --token is required in non-interactive mode."));
-      console.log(chalk.dim("  Get your token at: https://skillport.market/auth/cli-token"));
-      process.exitCode = 1;
+    if (!token && (options.yes || isJsonMode())) {
+      outputError("INPUT_INVALID", "--token is required in non-interactive mode.", {
+        exitCode: EXIT.INPUT_INVALID,
+        hints: ["Get your token at: https://skillport.market/auth/cli-token"],
+      });
       return;
     }
     if (!token) {
@@ -89,6 +94,11 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
     // Auto-register public key if available
     await registerPublicKey(config);
+
+    if (isJsonMode()) {
+      outputResult({ authenticated: true, method: "token" });
+      return;
+    }
 
     console.log(chalk.green("Login successful! Token saved."));
     return;
@@ -110,7 +120,9 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
     const code = (err as { code?: string }).code;
     if (code === "EADDRINUSE" && !userExplicitPort) {
       // Retry with OS-assigned free port
-      console.log(chalk.yellow(`Port ${requestedPort} in use, selecting a free port...`));
+      if (!isJsonMode()) {
+        console.log(chalk.yellow(`Port ${requestedPort} in use, selecting a free port...`));
+      }
       actualPort = await listenOnPort(server, 0, bindHost);
     } else {
       throw err;
@@ -123,16 +135,20 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
   if (options.browser === false) {
     // --no-browser: print URL only
-    console.log(chalk.bold("Open this URL in your browser to authenticate:"));
-    console.log();
-    console.log(`  ${authUrl}`);
-    console.log();
-    console.log(chalk.dim(`Listening on ${callbackHost}:${actualPort}`));
-    console.log(chalk.dim("Waiting for authentication callback..."));
+    if (!isJsonMode()) {
+      console.log(chalk.bold("Open this URL in your browser to authenticate:"));
+      console.log();
+      console.log(`  ${authUrl}`);
+      console.log();
+      console.log(chalk.dim(`Listening on ${callbackHost}:${actualPort}`));
+      console.log(chalk.dim("Waiting for authentication callback..."));
+    }
   } else {
-    console.log(chalk.dim(`Opening browser to: ${authUrl}`));
-    console.log(chalk.dim(`Listening on ${callbackHost}:${actualPort}`));
-    console.log(chalk.dim("Waiting for authentication..."));
+    if (!isJsonMode()) {
+      console.log(chalk.dim(`Opening browser to: ${authUrl}`));
+      console.log(chalk.dim(`Listening on ${callbackHost}:${actualPort}`));
+      console.log(chalk.dim("Waiting for authentication..."));
+    }
 
     const { exec } = await import("node:child_process");
     const openCmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
@@ -211,6 +227,11 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
 
   // Auto-register public key if available
   await registerPublicKey(config);
+
+  if (isJsonMode()) {
+    outputResult({ authenticated: true, method: "browser" });
+    return;
+  }
 
   console.log(chalk.green("Login successful! Token saved."));
 }

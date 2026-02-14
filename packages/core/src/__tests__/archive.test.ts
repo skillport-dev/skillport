@@ -94,10 +94,9 @@ describe("Archive create/extract", () => {
 
     const extracted = await extractSSP(sspBuffer);
 
-    // The signature was made against the serialized manifest
-    const manifestJson = JSON.stringify(extracted.manifest, null, 2);
+    // The signature was made against the raw manifest JSON (before Zod defaults are applied)
     const valid = verifySignature(
-      manifestJson,
+      extracted.manifestRaw,
       extracted.authorSignature!,
       kp.publicKey,
     );

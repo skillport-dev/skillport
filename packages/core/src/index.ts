@@ -16,6 +16,10 @@ export {
   InstallSchema,
   AuthorSchema,
   IntegrationLevel,
+  SkillInputSchema,
+  SkillOutputSchema,
+  ScopeSchema,
+  DeclaredRiskEnum,
 } from "./manifest/schema.js";
 export type {
   Manifest,
@@ -34,6 +38,10 @@ export type {
   Install,
   Author,
   Severity,
+  SkillInput,
+  SkillOutput,
+  Scope,
+  DeclaredRisk,
 } from "./manifest/schema.js";
 
 // Convert

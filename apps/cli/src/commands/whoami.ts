@@ -8,6 +8,7 @@ import {
   loadPublicKey,
   isTokenExpired,
 } from "../utils/config.js";
+import { isJsonMode, outputResult } from "../utils/output.js";
 
 interface WhoamiResult {
   config_path: string;
@@ -51,8 +52,8 @@ function gather(): WhoamiResult {
 export function whoamiCommand(opts: { json?: boolean }): void {
   const info = gather();
 
-  if (opts.json) {
-    console.log(JSON.stringify(info, null, 2));
+  if (isJsonMode()) {
+    outputResult(info as unknown as Record<string, unknown>);
     return;
   }
 
