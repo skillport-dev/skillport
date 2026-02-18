@@ -53,6 +53,7 @@ program
   .option("--skill-version <ver>", "Skill version (semver)")
   .option("--author <name>", "Author name")
   .option("--openclaw-compat <range>", "OpenClaw compatibility range")
+  .option("--platform <platform>", "Target platform (openclaw, claude-code, universal)")
   .option("--os <os...>", "Compatible OS (macos, linux, windows)")
   .option("--json", "Output as JSON")
   .action(exportCommand);

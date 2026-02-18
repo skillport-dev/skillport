@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, basename } from "node:path";
 import chalk from "chalk";
 import inquirer from "inquirer";
-import { createSSP, computeKeyId, type Manifest } from "@skillport/core";
+import { createSSP, computeKeyId, detectPlatform, type Manifest, type Platform } from "@skillport/core";
 import { scanFiles, generateReport, isScannable, MAX_FILE_SIZE } from "@skillport/scanner";
 import { SP_VERSION } from "@skillport/shared";
 import {
@@ -236,6 +236,7 @@ export interface ExportOptions {
   author?: string;
   openclawCompat?: string;
   os?: string[];
+  platform?: string;
 }
 
 export async function exportCommand(
@@ -320,6 +321,37 @@ export async function exportCommand(
     return;
   }
 
+  // ─── Platform Detection ───
+  const skillMdText = selectedFiles.get("SKILL.md")!.toString("utf-8");
+  let platform: Platform;
+
+  if (options.platform) {
+    platform = options.platform as Platform;
+  } else {
+    const detected = detectPlatform(skillMdText);
+    if (detected !== "unknown") {
+      platform = detected;
+      logProgress(`Detected platform: ${chalk.cyan(platform)}`);
+    } else if (options.yes) {
+      platform = "openclaw";
+      logProgress(`Platform not detected, defaulting to: ${chalk.cyan(platform)}`);
+    } else {
+      const { selectedPlatform } = await inquirer.prompt([
+        {
+          type: "list",
+          name: "selectedPlatform",
+          message: "Could not auto-detect platform. Select target platform:",
+          choices: [
+            { name: "OpenClaw", value: "openclaw" },
+            { name: "Claude Code", value: "claude-code" },
+            { name: "Universal (both)", value: "universal" },
+          ],
+        },
+      ]);
+      platform = selectedPlatform;
+    }
+  }
+
   // Gather manifest info
   const config = loadConfig();
   const publicKey = loadPublicKey();
@@ -359,7 +391,7 @@ export async function exportCommand(
       osCompat: options.os || ["macos", "linux"],
     };
   } else {
-    answers = await inquirer.prompt([
+    const prompts: Parameters<typeof inquirer.prompt>[0] = [
       {
         type: "input",
         name: "id",
@@ -378,20 +410,36 @@ export async function exportCommand(
           /^\d+\.\d+\.\d+$/.test(v) || "Must be semver (x.y.z)",
       },
       { type: "input", name: "authorName", message: "Author name:" },
-      {
+    ];
+
+    // Only ask for OpenClaw compat when platform is openclaw or universal
+    if (platform === "openclaw" || platform === "universal") {
+      prompts.push({
         type: "input",
         name: "openclawCompat",
         message: "OpenClaw compatibility range:",
         default: ">=1.0.0",
-      },
-      {
-        type: "checkbox",
-        name: "osCompat",
-        message: "Compatible OS:",
-        choices: ["macos", "linux", "windows"],
-        default: ["macos", "linux"],
-      },
-    ]);
+      });
+    }
+
+    prompts.push({
+      type: "checkbox",
+      name: "osCompat",
+      message: "Compatible OS:",
+      choices: ["macos", "linux", "windows"],
+      default: ["macos", "linux"],
+    });
+
+    const raw = await inquirer.prompt(prompts);
+    answers = {
+      id: raw.id,
+      name: raw.name,
+      description: raw.description,
+      version: raw.version,
+      authorName: raw.authorName,
+      openclawCompat: raw.openclawCompat || ">=1.0.0",
+      osCompat: raw.osCompat,
+    };
   }
 
   // Build entrypoints from SKILL.md
@@ -419,7 +467,7 @@ export async function exportCommand(
       name: answers.authorName,
       signing_key_id: keyId,
     },
-    platform: "openclaw",
+    platform,
     openclaw_compat: answers.openclawCompat,
     os_compat: answers.osCompat as ("macos" | "linux" | "windows")[],
     entrypoints,
