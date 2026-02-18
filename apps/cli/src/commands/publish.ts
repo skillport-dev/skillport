@@ -94,7 +94,7 @@ export async function publishCommand(sspPath: string): Promise<void> {
 
     // Auto-heal: register key and retry if not registered
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+      let errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
       const errorMsg = String(errorBody.error || "");
 
       if (errorMsg.includes("Signing key is not registered") && hasKeys()) {
@@ -103,6 +103,9 @@ export async function publishCommand(sspPath: string): Promise<void> {
         if (registered) {
           logProgress("Retrying upload...");
           response = await upload();
+          if (!response.ok) {
+            errorBody = await response.json().catch(() => ({})) as Record<string, unknown>;
+          }
         } else {
           outputError("KEY_NOT_REGISTERED", "Could not register key. Run 'skillport keys register' manually.", {
             exitCode: EXIT.GENERAL,
@@ -113,10 +116,10 @@ export async function publishCommand(sspPath: string): Promise<void> {
       }
 
       if (!response.ok) {
-        const retryBody = await response.json().catch(() => ({})) as Record<string, unknown>;
-        outputError("UPLOAD_FAILED", `Upload failed: ${retryBody.error || response.statusText}`, {
+        outputError("UPLOAD_FAILED", `Upload failed: ${errorBody.error || response.statusText} (HTTP ${response.status})`, {
           exitCode: EXIT.NETWORK,
           retryable: true,
+          hints: errorBody.code ? [`Error code: ${errorBody.code}`] : undefined,
         });
         return;
       }
