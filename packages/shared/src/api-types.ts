@@ -22,10 +22,7 @@ export interface SkillListQuery {
   q?: string;
   category?: SkillCategory;
   platform?: SkillPlatform | "all";
-  os?: string;
-  min_rating?: number;
-  max_price?: number;
-  sort?: "popular" | "recent" | "rating" | "price";
+  sort?: "popular" | "recent" | "rating" | "price" | "quality" | "updated";
   page?: number;
   per_page?: number;
 }
