@@ -172,6 +172,37 @@ export async function loginCommand(options: LoginOptions): Promise<void> {
       const url = new URL(req.url || "", `http://${callbackHost}:${actualPort}`);
 
       if (url.pathname === "/callback") {
+        // Support both POST (secure, token in body) and GET (legacy, token in URL)
+        if (req.method === "POST") {
+          let body = "";
+          req.on("data", (chunk: Buffer) => { body += chunk.toString(); });
+          req.on("end", () => {
+            try {
+              const data = JSON.parse(body);
+              if (data.state !== state) {
+                res.writeHead(400, { "Content-Type": "text/html" });
+                res.end("<h1>State mismatch. Please try again.</h1>");
+                return;
+              }
+              if (!data.token) {
+                res.writeHead(400, { "Content-Type": "text/html" });
+                res.end("<h1>No token received. Please try again.</h1>");
+                return;
+              }
+              res.writeHead(200, { "Content-Type": "text/html" });
+              res.end("<h1>Logged in to SkillPort! You can close this window.</h1>");
+              clearTimeout(timeout);
+              server.close();
+              resolve(data.token);
+            } catch {
+              res.writeHead(400, { "Content-Type": "text/html" });
+              res.end("<h1>Invalid request body.</h1>");
+            }
+          });
+          return;
+        }
+
+        // GET fallback for backward compatibility
         const callbackState = url.searchParams.get("state");
         const accessToken = url.searchParams.get("token");
 
