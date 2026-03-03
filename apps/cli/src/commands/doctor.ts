@@ -151,7 +151,7 @@ async function runChecks(): Promise<DoctorResult> {
   return { checks, ok };
 }
 
-export async function doctorCommand(opts: { json?: boolean }): Promise<void> {
+export async function doctorCommand(_opts: { json?: boolean }): Promise<void> {
   if (!isJsonMode()) {
     console.log(chalk.bold("SkillPort Doctor"));
     console.log();

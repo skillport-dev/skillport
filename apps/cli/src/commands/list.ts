@@ -29,7 +29,7 @@ const STATUS_LABELS: Record<string, string> = {
   pending_review: "pending",
 };
 
-export async function listCommand(opts: { json?: boolean }): Promise<void> {
+export async function listCommand(_opts: { json?: boolean }): Promise<void> {
   const config = loadConfig();
 
   const authError = checkAuthReady(config);

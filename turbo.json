@@ -18,9 +18,8 @@
         "NEXT_PUBLIC_API_URL"
       ]
     },
-    "test": {
-      "dependsOn": ["build"]
-    },
+    "test": {},
+    "test:coverage": {},
     "lint": {},
     "clean": {
       "cache": false

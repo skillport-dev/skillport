@@ -1,6 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { homedir, platform } from "node:os";
+import { homedir } from "node:os";
 import chalk from "chalk";
 import {
   extractSSP,

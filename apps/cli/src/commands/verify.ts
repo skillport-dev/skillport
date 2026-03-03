@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import chalk from "chalk";
 import { extractSSP, verifySignature, verifyChecksums } from "@skillport/core";
-import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
+import { isJsonMode, outputResult, EXIT } from "../utils/output.js";
 
 export async function verifyCommand(
   sspPath: string,

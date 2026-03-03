@@ -38,7 +38,7 @@ function extractFmList(fm: string, key: string): string[] {
 export function convertToUniversal(
   skillMd: string,
   files: Map<string, Buffer>,
-  options: ConvertOptions = {},
+  _options: ConvertOptions = {},
 ): ConvertResult {
   const warnings: ConvertWarning[] = [];
   const sourcePlatform = detectPlatform(skillMd);

@@ -33,7 +33,6 @@ import {
 import {
   checkEnvironment,
   findIncompatibleSections,
-  detectOS,
 } from "../utils/env-detect.js";
 import {
   isJsonMode,
@@ -334,7 +333,7 @@ export async function installCommand(
     displayDangerFlags(manifest.danger_flags);
   }
 
-  const permSummary = assessPermissions(manifest.permissions);
+  const _permSummary = assessPermissions(manifest.permissions);
 
   // Check if --accept-risk is required
   const requiresAcceptRisk =

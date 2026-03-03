@@ -43,7 +43,7 @@ export function parseSkillMd(content: string): ParsedSkill {
 
   // Split into lines and find ## boundaries
   const lines = body.split("\n");
-  let headerLines: string[] = [];
+  const headerLines: string[] = [];
   const sections: SkillSection[] = [];
   let currentHeading = "";
   let currentLines: string[] = [];

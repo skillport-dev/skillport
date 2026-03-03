@@ -71,7 +71,7 @@ export function detectPlatform(skillMd: string): DetectedPlatform {
  */
 export function detectDynamicContexts(skillMd: string): string[] {
   const commands: string[] = [];
-  const regex = /!\`([^`]+)\`/g;
+  const regex = /![`]([^`]+)[`]/g;
   let match;
   while ((match = regex.exec(skillMd)) !== null) {
     commands.push(match[1]);

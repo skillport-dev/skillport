@@ -49,7 +49,7 @@ function gather(): WhoamiResult {
   };
 }
 
-export function whoamiCommand(opts: { json?: boolean }): void {
+export function whoamiCommand(_opts: { json?: boolean }): void {
   const info = gather();
 
   if (isJsonMode()) {

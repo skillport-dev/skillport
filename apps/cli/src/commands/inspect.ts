@@ -21,9 +21,7 @@ import {
   EXIT,
 } from "../utils/output.js";
 
-export interface InspectOptions {
-  // currently no extra options beyond --json
-}
+export type InspectOptions = object;
 
 export async function inspectCommand(
   target: string,

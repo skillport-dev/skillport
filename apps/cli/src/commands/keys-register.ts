@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { loadConfig, hasKeys } from "../utils/config.js";
 import { registerPublicKey } from "../utils/register-key.js";
 import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";

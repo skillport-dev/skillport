@@ -190,7 +190,7 @@ export function extractDynamicContextMeta(skillMd: string): DynamicContextMeta |
   const content = match[1];
   const commands: string[] = [];
   for (const line of content.split("\n")) {
-    const cmdMatch = line.trim().match(/^-\s*!\`([^`]+)\`$/);
+    const cmdMatch = line.trim().match(/^-\s*![`]([^`]+)[`]$/);
     if (cmdMatch) {
       commands.push(cmdMatch[1]);
     }

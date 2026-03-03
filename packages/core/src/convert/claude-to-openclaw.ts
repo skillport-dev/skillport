@@ -61,7 +61,7 @@ function convertPlaceholders(body: string): string {
  * Remove dynamic context lines (!`command`) from body and return cleaned body.
  */
 function removeDynamicContextLines(body: string): string {
-  return body.replace(/^.*!\`[^`]+\`.*$/gm, "").replace(/\n{3,}/g, "\n\n");
+  return body.replace(/^.*![`][^`]+[`].*$/gm, "").replace(/\n{3,}/g, "\n\n");
 }
 
 /**

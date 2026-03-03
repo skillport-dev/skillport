@@ -16,7 +16,7 @@ interface LoginOptions {
   host?: string;
 }
 
-const ALLOWED_HOSTS = ["127.0.0.1", "localhost", "::1"];
+const _ALLOWED_HOSTS = ["127.0.0.1", "localhost", "::1"];
 const DEFAULT_HOST = "127.0.0.1";
 
 function listenOnPort(server: Server, port: number, host: string): Promise<number> {

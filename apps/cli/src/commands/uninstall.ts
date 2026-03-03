@@ -1,4 +1,4 @@
-import { rmSync, existsSync, readdirSync } from "node:fs";
+import { rmSync, existsSync } from "node:fs";
 import chalk from "chalk";
 import inquirer from "inquirer";
 import { loadRegistry, saveRegistry, appendAuditLog } from "../utils/config.js";

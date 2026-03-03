@@ -6,11 +6,20 @@
     "build": "turbo build",
     "test": "turbo test",
     "lint": "turbo lint",
-    "clean": "turbo clean"
+    "clean": "turbo clean",
+    "format": "prettier --write \"apps/*/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"apps/*/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.{ts,tsx}\"",
+    "test:coverage": "turbo test:coverage"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.39.2",
+    "globals": "^15.15.0",
+    "prettier": "^3.8.1",
     "turbo": "^2.8.7",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.54.0",
     "vitest": "^3.0.0"
   },
   "packageManager": "pnpm@10.17.1",

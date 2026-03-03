@@ -1,6 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import chalk from "chalk";
 import { extractSSP } from "@skillport/core";
 import {
   scanFiles,
@@ -9,7 +8,7 @@ import {
   MAX_FILE_SIZE,
 } from "@skillport/scanner";
 import { displayScanReport } from "../utils/display.js";
-import { isJsonMode, outputResult, outputError, EXIT } from "../utils/output.js";
+import { isJsonMode, outputResult, EXIT } from "../utils/output.js";
 
 function collectFiles(
   dir: string,

@@ -123,7 +123,7 @@ export function detectCliDeps(
 export function checkFileReferences(
   skillMdContent: string,
   payloadFiles: string[],
-  sectionHeadings?: string[],
+  _sectionHeadings?: string[],
 ): BrokenRef[] {
   const broken: BrokenRef[] = [];
   const fileSet = new Set(payloadFiles);

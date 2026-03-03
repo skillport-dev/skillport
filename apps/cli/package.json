@@ -33,6 +33,8 @@
     "build": "rm -rf dist && node scripts/bundle.js",
     "build:dev": "tsc",
     "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
     "clean": "rm -rf dist",
     "prepack": "rm -rf dist && node scripts/bundle.js"
   },

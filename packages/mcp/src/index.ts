@@ -239,7 +239,7 @@ server.tool(
   },
   async ({ action, risk_score, has_platform_sig }) => {
     // MCP operations are always non-interactive
-    const context = {
+    const _context = {
       nonInteractive: true,
       riskScore: risk_score,
       hasPlatformSig: has_platform_sig,
